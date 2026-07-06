@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 
 # COLE A SUA URL DO SUPABASE AQUI TAMBÉM!
-URL_SUPABASE = "postgresql://postgres.qvgxlpnicbjgnierhbvi:supleweb26%40@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
+URL_SUPABASE = "postgresql://postgres:supleweb26%40@db.qvgxlpnicbjgnierhbvi.supabase.co:5432/postgres"
 
 def conectar_banco():
     return psycopg2.connect(URL_SUPABASE)
