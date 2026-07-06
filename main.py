@@ -5,11 +5,15 @@ import time
 import os
 from datetime import datetime, timedelta
 
-# COLE A SUA URL DO SUPABASE AQUI TAMBÉM!
-URL_SUPABASE = "postgresql://postgres.qvgxlpnicbjgnierhbvi:supleweb26%40@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
-
 def conectar_banco():
-    return psycopg2.connect(URL_SUPABASE)
+    return psycopg2.connect(
+        host="aws-1-sa-east-1.pooler.supabase.com", 
+        port=6543,
+        dbname="postgres",
+        user="postgres.qvgxlpnicbjqnierhbvi",
+        password="supleweb26@",
+        sslmode="require"
+    )
 
 def tarefa_se_aplica(recorrencia, data_alvo: datetime):
     dia_da_semana = data_alvo.weekday()
