@@ -5,14 +5,25 @@ import time
 import os
 from datetime import datetime, timedelta
 
+# ---------------------------------------------------------------------------
+# CONEXÃO COM O BANCO
+# Preferimos a variável de ambiente DATABASE_URL (configurada no Render).
+# Se ela não existir, caímos nos parâmetros que já funcionaram no seu banco.py.
+# IMPORTANTE: mantenha seu repositório no GitHub PRIVADO enquanto a senha
+# estiver aqui. O ideal é configurar DB_PASSWORD (ou DATABASE_URL) no Render
+# e depois trocar a senha do banco no painel do Supabase.
+# ---------------------------------------------------------------------------
 def conectar_banco():
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return psycopg2.connect(url, sslmode="require")
     return psycopg2.connect(
-        host="aws-1-sa-east-1.pooler.supabase.com", 
+        host="aws-1-sa-east-1.pooler.supabase.com",
         port=6543,
         dbname="postgres",
         user="postgres.qvgxlpnicbjqnierhbvi",
-        password="supleweb26@",
-        sslmode="require"
+        password=os.environ.get("DB_PASSWORD", "supleweb26@"),
+        sslmode="require",
     )
 
 def tarefa_se_aplica(recorrencia, data_alvo: datetime):
@@ -94,11 +105,11 @@ def main(page: ft.Page):
             
             # Mostra o feedback de login para o usuário
             if is_novo_usuario:
-                page.snack_bar = ft.SnackBar(ft.Text(f"🎉 Novo perfil '{nome_digitado}' criado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
+                aviso_login = ft.SnackBar(ft.Text(f"🎉 Novo perfil '{nome_digitado}' criado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
             else:
-                page.snack_bar = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome_digitado}!"), bgcolor=ft.Colors.BLUE_800)
-                
-            page.snack_bar.open = True
+                aviso_login = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome_digitado}!"), bgcolor=ft.Colors.BLUE_800)
+
+            page.open(aviso_login)
             page.update()
 
     botao_entrar = ft.FilledButton(
@@ -156,8 +167,7 @@ def main(page: ft.Page):
                     data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
                     f.write(f"[{data_br}]\n{msg}\n\n")
             
-            page.snack_bar = ft.SnackBar(ft.Text("Diário exportado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
-            page.snack_bar.open = True
+            page.open(ft.SnackBar(ft.Text("Diário exportado com sucesso!"), bgcolor=ft.Colors.GREEN_800))
             page.update()
 
     relogio_digital = ft.Text(
@@ -318,12 +328,11 @@ def main(page: ft.Page):
                 )
                 conexao.commit()
                 conexao.close()
-                dialogo.open = False
+                page.close(dialogo)
                 carregar_tarefas()
 
         def cancelar_edicao(e):
-            dialogo.open = False
-            page.update()
+            page.close(dialogo)
 
         dialogo = ft.AlertDialog(
             title=ft.Text("✏️ Editar Tarefa"),
@@ -335,9 +344,7 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END,
         )
         
-        page.dialog = dialogo
-        dialogo.open = True
-        page.update()
+        page.open(dialogo)
 
     def atualizar_streak_ui():
         texto_ofensiva.value = f"🔥 {calcular_ofensiva()} dias"
@@ -395,11 +402,8 @@ def main(page: ft.Page):
             
             lista_tarefas.controls.append(linha_tarefa)
             
-        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
-        row = cursor.fetchone()
-        campo_gratidao_hoje.value = row[0] if row else ""
-        
         conexao.close()
+        carregar_gratidoes()
         atualizar_streak_ui()
         page.update()
 
@@ -463,104 +467,228 @@ def main(page: ft.Page):
             campo_nova_tarefa.value = ""
             carregar_tarefas()
 
-    campo_gratidao_hoje = ft.TextField(
-        label="Pelo que você é grato hoje? (mín. 4 palavras p/ pontuar)",
-        multiline=True, 
-        min_lines=2, 
-        max_lines=3, 
-        border_color=ft.Colors.GREEN_700, 
-        width=450
+    # ------------------------------------------------------------------
+    # GRATIDÃO DINÂMICA (várias gratidões por dia, com editar/excluir)
+    # Guardamos os itens do dia numa lista e persistimos juntos (1 linha
+    # por dia no banco, separados por quebra de linha) — sem mexer no schema.
+    # ------------------------------------------------------------------
+    gratidoes_hoje = []                       # itens de gratidão de hoje (strings)
+    lista_gratidao_ui = ft.Column(spacing=8, width=440)
+
+    campo_nova_gratidao = ft.TextField(
+        hint_text="Ex: Sou grato pela minha família",
+        label="Adicionar uma gratidão",
+        width=440,
+        multiline=True,
+        min_lines=1,
+        max_lines=3,
+        border_color=ft.Colors.BLUE_400,
     )
 
-    def salvar_gratidao(e):
-        texto = campo_gratidao_hoje.value.strip()
+    def persistir_gratidoes():
+        """Salva a lista do dia no banco (junta em 1 linha por dia)."""
+        data_hoje = datetime.now().strftime("%Y-%m-%d")
+        usuario = estado_app["usuario"]
+        itens = [g.strip() for g in gratidoes_hoje if g.strip()]
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        if itens:
+            texto = "\n".join(itens)
+            cursor.execute("""
+                INSERT INTO gratidao (usuario, data, mensagem)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (usuario, data)
+                DO UPDATE SET mensagem = EXCLUDED.mensagem
+            """, (usuario, data_hoje, texto))
+        else:
+            cursor.execute("DELETE FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        conexao.commit()
+        conexao.close()
+        atualizar_streak_ui()
+
+    def criar_linha_gratidao(indice, texto_item):
+        rotulo = ft.Text(f"🙏 {texto_item}", width=320, color=ft.Colors.WHITE)
+        botao_editar = ft.IconButton(
+            icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.BLUE_400, tooltip="Editar",
+            on_click=lambda e, i=indice: iniciar_edicao_gratidao(i)
+        )
+        botao_excluir = ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, tooltip="Excluir",
+            on_click=lambda e, i=indice: excluir_gratidao(i)
+        )
+        return ft.Container(
+            content=ft.Row(
+                [rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            ),
+            bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8,
+            border=ft.Border.all(1, ft.Colors.GREY_800), width=440,
+        )
+
+    def renderizar_gratidoes():
+        lista_gratidao_ui.controls.clear()
+        if not gratidoes_hoje:
+            lista_gratidao_ui.controls.append(
+                ft.Text("Nenhuma gratidão registrada hoje ainda.", italic=True, color=ft.Colors.GREY_500)
+            )
+        else:
+            for indice, texto_item in enumerate(gratidoes_hoje):
+                lista_gratidao_ui.controls.append(criar_linha_gratidao(indice, texto_item))
+        page.update()
+
+    def iniciar_edicao_gratidao(indice):
+        campo_edit = ft.TextField(
+            value=gratidoes_hoje[indice], width=320,
+            multiline=True, min_lines=1, max_lines=3, border_color=ft.Colors.BLUE_400
+        )
+
+        def salvar_edit(e):
+            novo = campo_edit.value.strip()
+            if novo:
+                gratidoes_hoje[indice] = novo
+            else:
+                gratidoes_hoje.pop(indice)
+            persistir_gratidoes()
+            renderizar_gratidoes()
+
+        def cancelar_edit(e):
+            renderizar_gratidoes()
+
+        linha_edicao = ft.Container(
+            content=ft.Row(
+                [campo_edit, ft.Row([
+                    ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN_ACCENT, tooltip="Salvar", on_click=salvar_edit),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_color=ft.Colors.GREY_400, tooltip="Cancelar", on_click=cancelar_edit),
+                ], spacing=0)],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            ),
+            bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8,
+            border=ft.Border.all(1, ft.Colors.BLUE_400), width=440,
+        )
+        lista_gratidao_ui.controls[indice] = linha_edicao
+        page.update()
+
+    def excluir_gratidao(indice):
+        gratidoes_hoje.pop(indice)
+        persistir_gratidoes()
+        renderizar_gratidoes()
+
+    def adicionar_gratidao(e):
+        texto = campo_nova_gratidao.value.strip()
+        if texto:
+            gratidoes_hoje.append(texto)
+            persistir_gratidoes()
+            campo_nova_gratidao.value = ""
+            renderizar_gratidoes()
+            campo_nova_gratidao.focus()
+
+    def carregar_gratidoes():
         data_hoje = datetime.now().strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         conexao = conectar_banco()
         cursor = conexao.cursor()
-        
-        if texto:
-            cursor.execute("""
-                INSERT INTO gratidao (usuario, data, mensagem) 
-                VALUES (%s, %s, %s) 
-                ON CONFLICT (usuario, data) 
-                DO UPDATE SET mensagem = EXCLUDED.mensagem
-            """, (usuario, data_hoje, texto))
-            page.snack_bar = ft.SnackBar(ft.Text("Gratidão salva com sucesso!"), bgcolor=ft.Colors.GREEN_800)
-        else:
-            cursor.execute("DELETE FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
-            page.snack_bar = ft.SnackBar(ft.Text("Gratidão removida."), bgcolor=ft.Colors.GREY_800)
-            
-        conexao.commit()
+        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        row = cursor.fetchone()
         conexao.close()
-        atualizar_streak_ui()
-        page.snack_bar.open = True
-        page.update()
+        gratidoes_hoje.clear()
+        if row and row[0]:
+            for linha in row[0].split("\n"):
+                if linha.strip():
+                    gratidoes_hoje.append(linha.strip())
+        renderizar_gratidoes()
 
-    botao_salvar_gratidao = ft.FilledButton(
-        "Salvar Gratidão", 
-        on_click=salvar_gratidao, 
-        bgcolor=ft.Colors.GREEN_700
+    botao_adicionar_gratidao = ft.FilledButton(
+        content=ft.Row(
+            [ft.Icon(ft.Icons.ADD), ft.Text("Adicionar Gratidão", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)],
+            alignment=ft.MainAxisAlignment.CENTER, spacing=6
+        ),
+        on_click=adicionar_gratidao, bgcolor=ft.Colors.BLUE_600, width=440, height=44,
     )
-    
+
     container_gratidao = ft.Container(
         content=ft.Column(
-            [campo_gratidao_hoje, botao_salvar_gratidao], 
-            alignment=ft.MainAxisAlignment.CENTER, 
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            [
+                ft.Text("🙏 Diário de Gratidão de Hoje", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
+                ft.Text("Registre pelo que você é grato. Pode adicionar quantas quiser.", size=13, color=ft.Colors.GREY_400),
+                ft.Container(height=4),
+                lista_gratidao_ui,
+                ft.Container(height=4),
+                campo_nova_gratidao,
+                botao_adicionar_gratidao,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10
         ),
-        padding=15, 
-        border_radius=10, 
-        bgcolor=ft.Colors.GREY_900, 
-        border=ft.Border.all(1, ft.Colors.GREY_800), 
-        width=480
+        padding=15, border_radius=12, bgcolor=ft.Colors.GREY_900,
+        border=ft.Border.all(1, ft.Colors.BLUE_900), width=480,
     )
 
     texto_titulo = ft.Text(value="✅ Super Rotina", size=28, weight=ft.FontWeight.BOLD)
     texto_subtitulo = ft.Text("Seus Checks favoritos em um só lugar!", size=14, color=ft.Colors.GREY_400)
     
     campo_nova_tarefa = ft.TextField(
-        hint_text="O que precisamos checar hoje?", 
-        width=230, 
-        border_color=ft.Colors.GREEN_700
+        hint_text="Cadastre sua Rotina",
+        label="Nova tarefa de rotina",
+        width=440,
+        border_color=ft.Colors.GREEN_700,
     )
-    
+
     seletor_recorrencia = ft.Dropdown(
-        width=150, 
-        value="todo_dia", 
-        border_color=ft.Colors.GREEN_700, 
-        on_select=monitorar_dropdown_recorrencia, 
+        label="Com que frequência?",
+        width=440,
+        value="todo_dia",
+        border_color=ft.Colors.GREEN_700,
+        on_change=monitorar_dropdown_recorrencia,
         options=[
             ft.dropdown.Option("todo_dia", "Todo dia"),
-            ft.dropdown.Option("exceto_fds", "Dias de Semana"), 
+            ft.dropdown.Option("exceto_fds", "Dias de Semana"),
             ft.dropdown.Option("apenas_fds", "Finais de Semana"),
             ft.dropdown.Option("especifico", "Dias Específicos"),
         ]
     )
-    
+
     botao_adicionar = ft.FilledButton(
-        content=ft.Text(value="Adicionar", color=ft.Colors.WHITE), 
-        on_click=adicionar_tarefa, 
-        bgcolor=ft.Colors.GREEN_700
+        content=ft.Row(
+            [ft.Icon(ft.Icons.ADD), ft.Text("Cadastrar Rotina", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)],
+            alignment=ft.MainAxisAlignment.CENTER, spacing=6
+        ),
+        on_click=adicionar_tarefa,
+        bgcolor=ft.Colors.GREEN_700,
+        width=440,
+        height=44,
     )
-    
-    linha_input = ft.Row(
-        controls=[campo_nova_tarefa, seletor_recorrencia, botao_adicionar], 
-        alignment=ft.MainAxisAlignment.CENTER
+
+    container_cadastro_rotina = ft.Container(
+        content=ft.Column(
+            [
+                ft.Text("📋 Minha Rotina", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT),
+                ft.Text("Cadastre as tarefas que se repetem no seu dia.", size=13, color=ft.Colors.GREY_400),
+                ft.Container(height=4),
+                campo_nova_tarefa,
+                seletor_recorrencia,
+                linha_dias_semana,
+                botao_adicionar,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10
+        ),
+        padding=15, border_radius=12, bgcolor=ft.Colors.GREY_900,
+        border=ft.Border.all(1, ft.Colors.GREEN_900), width=480,
     )
 
     conteudo_checklist = ft.Column(
         controls=[
-            ft.Divider(), 
-            texto_titulo, 
-            texto_subtitulo, 
-            ft.Divider(), 
-            linha_input, 
-            linha_dias_semana, 
-            ft.Divider(), 
-            lista_tarefas, 
-            ft.Divider(), 
-            container_gratidao
+            ft.Divider(),
+            texto_titulo,
+            texto_subtitulo,
+            ft.Container(height=10),
+            container_cadastro_rotina,
+            ft.Container(height=16),
+            ft.Text("✅ Tarefas de hoje", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT),
+            lista_tarefas,
+            ft.Container(height=20),
+            ft.Divider(thickness=2, color=ft.Colors.GREY_700),
+            ft.Container(height=10),
+            container_gratidao,
+            ft.Container(height=20),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
@@ -828,29 +956,44 @@ def main(page: ft.Page):
             lista_registros
         ])
 
-    visual_atual = ft.Column(controls=[conteudo_checklist], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+    # As três telas ficam sempre montadas; alternamos apenas a visibilidade.
+    # Isso evita mover controles de "pai" (causa do bug de abas trocadas).
+    conteudo_dashboard.visible = False
+    conteudo_diario.visible = False
+    visual_atual = ft.Column(
+        controls=[conteudo_checklist, conteudo_dashboard, conteudo_diario],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
 
-    def alternar_para_checklist(e):
-        visual_atual.controls = [conteudo_checklist]
+    def _resetar_cores_abas():
+        botao_menu_checklist.bgcolor = ft.Colors.GREY_800
+        botao_menu_dashboard.bgcolor = ft.Colors.GREY_800
+        botao_menu_diario.bgcolor = ft.Colors.GREY_800
+
+    def alternar_para_checklist(e=None):
+        conteudo_checklist.visible = True
+        conteudo_dashboard.visible = False
+        conteudo_diario.visible = False
+        _resetar_cores_abas()
         botao_menu_checklist.bgcolor = ft.Colors.GREEN_700
-        botao_menu_dashboard.bgcolor = ft.Colors.GREY_800
-        botao_menu_diario.bgcolor = ft.Colors.GREY_800
         page.update()
 
-    def alternar_para_dashboard(e):
-        estado_app["data_dashboard"] = datetime.now() 
-        atualizar_dashboard() 
-        visual_atual.controls = [conteudo_dashboard]
-        botao_menu_checklist.bgcolor = ft.Colors.GREY_800
+    def alternar_para_dashboard(e=None):
+        estado_app["data_dashboard"] = datetime.now()
+        atualizar_dashboard()
+        conteudo_checklist.visible = False
+        conteudo_dashboard.visible = True
+        conteudo_diario.visible = False
+        _resetar_cores_abas()
         botao_menu_dashboard.bgcolor = ft.Colors.GREEN_700
-        botao_menu_diario.bgcolor = ft.Colors.GREY_800
         page.update()
 
-    def alternar_para_diario(e):
+    def alternar_para_diario(e=None):
         atualizar_diario()
-        visual_atual.controls = [conteudo_diario]
-        botao_menu_checklist.bgcolor = ft.Colors.GREY_800
-        botao_menu_dashboard.bgcolor = ft.Colors.GREY_800
+        conteudo_checklist.visible = False
+        conteudo_dashboard.visible = False
+        conteudo_diario.visible = True
+        _resetar_cores_abas()
         botao_menu_diario.bgcolor = ft.Colors.GREEN_700
         page.update()
 
