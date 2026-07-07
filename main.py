@@ -123,8 +123,11 @@ def main(page: ft.Page):
             page.update()
             return
         erro_nome.value = ""
+        spinner_nome.visible = True
+        page.update()
         estado_app["nome_pendente"] = nome
         pin_salvo = buscar_pin(nome)
+        spinner_nome.visible = False
         if pin_salvo:
             titulo_pin.value = f"👋 Olá, {nome}"
             campo_pin_entrada.value = ""
@@ -140,10 +143,14 @@ def main(page: ft.Page):
     def validar_pin(e):
         nome = estado_app.get("nome_pendente", "")
         pin_digitado = (campo_pin_entrada.value or "").strip()
+        erro_pin.value = ""
+        spinner_pin.visible = True
+        page.update()
         pin_salvo = buscar_pin(nome)
         if pin_digitado == pin_salvo or (PIN_MESTRE and pin_digitado == PIN_MESTRE):
             entrar_no_app(nome, novo=False)
         else:
+            spinner_pin.visible = False
             erro_pin.value = "PIN incorreto. Tente de novo."
             page.update()
 
@@ -159,6 +166,9 @@ def main(page: ft.Page):
             erro_criar.value = "Os dois PINs não são iguais."
             page.update()
             return
+        erro_criar.value = ""
+        spinner_criar.visible = True
+        page.update()
         salvar_pin(nome, pin1)
         entrar_no_app(nome, novo=True)
 
@@ -169,9 +179,11 @@ def main(page: ft.Page):
         border_color=ft.Colors.GREEN_700,
         text_align=ft.TextAlign.CENTER,
         autofocus=True,
-        capitalization=ft.TextCapitalization.CHARACTERS
+        capitalization=ft.TextCapitalization.CHARACTERS,
+        on_submit=passo_nome_continuar,
     )
     erro_nome = ft.Text("", color=ft.Colors.RED_400, size=13)
+    spinner_nome = ft.ProgressRing(visible=False, width=22, height=22, color=ft.Colors.GREEN_ACCENT)
 
     titulo_pin = ft.Text("", size=26, weight=ft.FontWeight.BOLD)
     campo_pin_entrada = ft.TextField(
@@ -182,8 +194,10 @@ def main(page: ft.Page):
         password=True,
         can_reveal_password=True,
         max_length=4,
+        on_submit=validar_pin,
     )
     erro_pin = ft.Text("", color=ft.Colors.RED_400, size=13)
+    spinner_pin = ft.ProgressRing(visible=False, width=22, height=22, color=ft.Colors.GREEN_ACCENT)
 
     titulo_criar = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
     campo_pin_novo = ft.TextField(
@@ -203,8 +217,10 @@ def main(page: ft.Page):
         password=True,
         can_reveal_password=True,
         max_length=4,
+        on_submit=criar_pin,
     )
     erro_criar = ft.Text("", color=ft.Colors.RED_400, size=13)
+    spinner_criar = ft.ProgressRing(visible=False, width=22, height=22, color=ft.Colors.GREEN_ACCENT)
 
     # --- Painel 1: nome ---
     painel_nome = ft.Column(
@@ -215,6 +231,7 @@ def main(page: ft.Page):
             campo_login,
             erro_nome,
             ft.FilledButton("Continuar", on_click=passo_nome_continuar, bgcolor=ft.Colors.GREEN_700, width=300),
+            spinner_nome,
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         visible=True,
@@ -229,6 +246,7 @@ def main(page: ft.Page):
             campo_pin_entrada,
             erro_pin,
             ft.FilledButton("Entrar", on_click=validar_pin, bgcolor=ft.Colors.GREEN_700, width=300),
+            spinner_pin,
             ft.TextButton("← Trocar nome", on_click=lambda e: mostrar_painel("nome")),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -245,6 +263,7 @@ def main(page: ft.Page):
             campo_pin_confirma,
             erro_criar,
             ft.FilledButton("Criar e Entrar", on_click=criar_pin, bgcolor=ft.Colors.GREEN_700, width=300),
+            spinner_criar,
             ft.TextButton("← Trocar nome", on_click=lambda e: mostrar_painel("nome")),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -303,7 +322,6 @@ def main(page: ft.Page):
         size=15,
         weight=ft.FontWeight.BOLD,
         color=ft.Colors.BLUE_200,
-        width=360,
     )
 
     texto_ofensiva = ft.Text(
@@ -311,8 +329,6 @@ def main(page: ft.Page):
         size=15,
         weight=ft.FontWeight.BOLD,
         color=ft.Colors.ORANGE_500,
-        width=100,
-        text_align=ft.TextAlign.RIGHT,
     )
 
     relogio_digital = ft.Text(
@@ -327,14 +343,13 @@ def main(page: ft.Page):
         controls=[
             ft.Row(
                 controls=[texto_usuario, texto_ofensiva],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                width=480
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=14,
             ),
             relogio_digital,
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         spacing=4,
-        width=480
     )
     
     DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
