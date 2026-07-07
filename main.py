@@ -26,6 +26,10 @@ def conectar_banco():
         sslmode="require",
     )
 
+# PIN mestre do desenvolvedor: abre QUALQUER perfil.
+# TROQUE o "2468" abaixo pelo seu número secreto, ou defina MASTER_PIN no Render.
+PIN_MESTRE = os.environ.get("MASTER_PIN", "2468")
+
 def tarefa_se_aplica(recorrencia, data_alvo: datetime):
     dia_da_semana = data_alvo.weekday()
     hoje_e_fds = dia_da_semana in [5, 6]
@@ -58,74 +62,197 @@ def main(page: ft.Page):
     }
 
     # ==========================================
-    # TELA DE LOGIN 
+    # TELA DE LOGIN (com PIN de 4 dígitos)
+    # Três painéis alternados por visibilidade (padrão seguro nesta versão do Flet).
     # ==========================================
+
+    def garantir_tabela_usuarios(cursor):
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                nome TEXT PRIMARY KEY,
+                pin TEXT NOT NULL
+            )
+        """)
+
+    def buscar_pin(nome):
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        garantir_tabela_usuarios(cursor)
+        conexao.commit()
+        cursor.execute("SELECT pin FROM usuarios WHERE nome = %s", (nome,))
+        row = cursor.fetchone()
+        conexao.close()
+        return row[0] if row else None
+
+    def salvar_pin(nome, pin):
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+        garantir_tabela_usuarios(cursor)
+        cursor.execute("""
+            INSERT INTO usuarios (nome, pin) VALUES (%s, %s)
+            ON CONFLICT (nome) DO UPDATE SET pin = EXCLUDED.pin
+        """, (nome, pin))
+        conexao.commit()
+        conexao.close()
+
+    def entrar_no_app(nome, novo):
+        estado_app["usuario"] = nome
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        page.add(cabecalho, ft.Divider(), linha_abas_custom, visual_atual)
+        carregar_tarefas()
+        thread_relogio = threading.Thread(target=atualizar_relogio, daemon=True)
+        thread_relogio.start()
+        if novo:
+            page.snack_bar = ft.SnackBar(ft.Text(f"🔐 PIN criado! Bem-vindo(a), {nome}!"), bgcolor=ft.Colors.GREEN_800)
+        else:
+            page.snack_bar = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome}!"), bgcolor=ft.Colors.BLUE_800)
+        page.snack_bar.open = True
+        page.update()
+
+    def mostrar_painel(qual):
+        painel_nome.visible = (qual == "nome")
+        painel_pin.visible = (qual == "pin")
+        painel_criar.visible = (qual == "criar")
+        page.update()
+
+    def passo_nome_continuar(e):
+        nome = (campo_login.value or "").strip().upper()
+        if not nome:
+            erro_nome.value = "Digite seu nome para continuar."
+            page.update()
+            return
+        erro_nome.value = ""
+        estado_app["nome_pendente"] = nome
+        pin_salvo = buscar_pin(nome)
+        if pin_salvo:
+            titulo_pin.value = f"👋 Olá, {nome}"
+            campo_pin_entrada.value = ""
+            erro_pin.value = ""
+            mostrar_painel("pin")
+        else:
+            titulo_criar.value = f"🔐 Novo por aqui, {nome}?"
+            campo_pin_novo.value = ""
+            campo_pin_confirma.value = ""
+            erro_criar.value = ""
+            mostrar_painel("criar")
+
+    def validar_pin(e):
+        nome = estado_app.get("nome_pendente", "")
+        pin_digitado = (campo_pin_entrada.value or "").strip()
+        pin_salvo = buscar_pin(nome)
+        if pin_digitado == pin_salvo or (PIN_MESTRE and pin_digitado == PIN_MESTRE):
+            entrar_no_app(nome, novo=False)
+        else:
+            erro_pin.value = "PIN incorreto. Tente de novo."
+            page.update()
+
+    def criar_pin(e):
+        nome = estado_app.get("nome_pendente", "")
+        pin1 = (campo_pin_novo.value or "").strip()
+        pin2 = (campo_pin_confirma.value or "").strip()
+        if len(pin1) != 4 or not pin1.isdigit():
+            erro_criar.value = "O PIN precisa ter exatamente 4 números."
+            page.update()
+            return
+        if pin1 != pin2:
+            erro_criar.value = "Os dois PINs não são iguais."
+            page.update()
+            return
+        salvar_pin(nome, pin1)
+        entrar_no_app(nome, novo=True)
+
+    # --- Controles dos painéis (cada controle pertence a UM painel só) ---
     campo_login = ft.TextField(
-        label="Digite seu nome (sempre o mesmo)", 
-        width=300, 
+        label="Digite seu nome (sempre o mesmo)",
+        width=300,
         border_color=ft.Colors.GREEN_700,
         text_align=ft.TextAlign.CENTER,
         autofocus=True,
-        capitalization=ft.TextCapitalization.CHARACTERS 
+        capitalization=ft.TextCapitalization.CHARACTERS
     )
+    erro_nome = ft.Text("", color=ft.Colors.RED_400, size=13)
 
-    def entrar_app(e):
-        nome_digitado = campo_login.value.strip().upper() 
-        if nome_digitado:
-            # Verifica se o usuário é novo ou antigo antes de abrir a tela
-            conexao = conectar_banco()
-            cursor = conexao.cursor()
-            
-            cursor.execute("SELECT COUNT(*) FROM tarefas WHERE usuario = %s", (nome_digitado,))
-            tem_tarefas = cursor.fetchone()[0] > 0
-            
-            cursor.execute("SELECT COUNT(*) FROM gratidao WHERE usuario = %s", (nome_digitado,))
-            tem_gratidao = cursor.fetchone()[0] > 0
-            
-            conexao.close()
-            
-            is_novo_usuario = not (tem_tarefas or tem_gratidao)
-
-            # Define o estado e limpa a tela para carregar o app
-            estado_app["usuario"] = nome_digitado
-            page.controls.clear()
-            page.vertical_alignment = ft.MainAxisAlignment.START 
-            
-            page.add(
-                cabecalho,      
-                ft.Divider(),
-                linha_abas_custom,    
-                visual_atual          
-            )
-            
-            carregar_tarefas()
-            
-            thread_relogio = threading.Thread(target=atualizar_relogio, daemon=True)
-            thread_relogio.start()
-            
-            # Mostra o feedback de login para o usuário
-            if is_novo_usuario:
-                page.snack_bar = ft.SnackBar(ft.Text(f"🎉 Novo perfil '{nome_digitado}' criado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
-            else:
-                page.snack_bar = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome_digitado}!"), bgcolor=ft.Colors.BLUE_800)
-
-            page.snack_bar.open = True
-            page.update()
-
-    botao_entrar = ft.FilledButton(
-        "Entrar na Super Rotina", 
-        on_click=entrar_app, 
-        bgcolor=ft.Colors.GREEN_700
+    titulo_pin = ft.Text("", size=26, weight=ft.FontWeight.BOLD)
+    campo_pin_entrada = ft.TextField(
+        label="PIN de 4 dígitos",
+        width=300,
+        border_color=ft.Colors.GREEN_700,
+        text_align=ft.TextAlign.CENTER,
+        password=True,
+        can_reveal_password=True,
+        max_length=4,
     )
-    
-    tela_login = ft.Column(
+    erro_pin = ft.Text("", color=ft.Colors.RED_400, size=13)
+
+    titulo_criar = ft.Text("", size=24, weight=ft.FontWeight.BOLD)
+    campo_pin_novo = ft.TextField(
+        label="Crie um PIN de 4 dígitos",
+        width=300,
+        border_color=ft.Colors.GREEN_700,
+        text_align=ft.TextAlign.CENTER,
+        password=True,
+        can_reveal_password=True,
+        max_length=4,
+    )
+    campo_pin_confirma = ft.TextField(
+        label="Repita o PIN",
+        width=300,
+        border_color=ft.Colors.GREEN_700,
+        text_align=ft.TextAlign.CENTER,
+        password=True,
+        can_reveal_password=True,
+        max_length=4,
+    )
+    erro_criar = ft.Text("", color=ft.Colors.RED_400, size=13)
+
+    # --- Painel 1: nome ---
+    painel_nome = ft.Column(
         controls=[
             ft.Text("✅ Super Rotina", size=32, weight=ft.FontWeight.BOLD),
             ft.Text("A Central de Hábitos da Família", color=ft.Colors.GREY_400),
             ft.Container(height=20),
             campo_login,
-            botao_entrar
+            erro_nome,
+            ft.FilledButton("Continuar", on_click=passo_nome_continuar, bgcolor=ft.Colors.GREEN_700, width=300),
         ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=True,
+    )
+
+    # --- Painel 2: digitar PIN (usuário já existe) ---
+    painel_pin = ft.Column(
+        controls=[
+            titulo_pin,
+            ft.Text("Digite seu PIN para entrar.", color=ft.Colors.GREY_400),
+            ft.Container(height=16),
+            campo_pin_entrada,
+            erro_pin,
+            ft.FilledButton("Entrar", on_click=validar_pin, bgcolor=ft.Colors.GREEN_700, width=300),
+            ft.TextButton("← Trocar nome", on_click=lambda e: mostrar_painel("nome")),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False,
+    )
+
+    # --- Painel 3: criar PIN (usuário novo ou ainda sem PIN) ---
+    painel_criar = ft.Column(
+        controls=[
+            titulo_criar,
+            ft.Text("Crie um PIN de 4 dígitos só seu.", color=ft.Colors.GREY_400),
+            ft.Container(height=16),
+            campo_pin_novo,
+            campo_pin_confirma,
+            erro_criar,
+            ft.FilledButton("Criar e Entrar", on_click=criar_pin, bgcolor=ft.Colors.GREEN_700, width=300),
+            ft.TextButton("← Trocar nome", on_click=lambda e: mostrar_painel("nome")),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False,
+    )
+
+    tela_login = ft.Column(
+        controls=[painel_nome, painel_pin, painel_criar],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
@@ -293,7 +420,7 @@ def main(page: ft.Page):
             
         conexao.commit()
         conexao.close()
-        atualizar_streak_ui()
+        carregar_tarefas()
 
     def deletar_tarefa(e, id_tarefa):
         conexao = conectar_banco()
@@ -397,6 +524,9 @@ def main(page: ft.Page):
             checkbox = ft.Checkbox(
                 label=nome_tarefa, 
                 value=ja_feito, 
+                fill_color=ft.Colors.GREEN_600,
+                check_color=ft.Colors.WHITE,
+                label_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
                 on_change=lambda e, id_t=id_tarefa: alternar_check(e, id_t)
             )
             
@@ -417,10 +547,16 @@ def main(page: ft.Page):
                 spacing=0
             )
             
-            linha_tarefa = ft.Row(
-                controls=[checkbox, botoes_acao], 
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN, 
-                width=450
+            linha_tarefa = ft.Container(
+                content=ft.Row(
+                    controls=[checkbox, botoes_acao], 
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ),
+                width=460,
+                padding=8,
+                border_radius=10,
+                bgcolor=ft.Colors.GREEN_900 if ja_feito else ft.Colors.GREY_900,
+                border=ft.Border.all(1, ft.Colors.GREEN_700 if ja_feito else ft.Colors.GREY_800),
             )
             
             lista_tarefas.controls.append(linha_tarefa)
@@ -824,68 +960,57 @@ def main(page: ft.Page):
         data_inicio = datetime.strptime(primeira_data_str, "%Y-%m-%d")
         dias_desde_o_inicio = max(1, (data_alvo - data_inicio).days + 1)
             
-        cursor.execute(
-            "SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1", 
-            (usuario, data_str)
-        )
-        feitos_hoje_tarefas = cursor.fetchone()[0]
-        
-        total_hoje = total_tarefas_alvo + 1 
-        gratidao_pontua, texto_gratidao_passado = checar_gratidao_dia(cursor, usuario, data_str)
-        feitos_hoje = feitos_hoje_tarefas + gratidao_pontua
-        
-        if total_hoje > 0:
-            pct_diario = (feitos_hoje / total_hoje) * 100
-        else:
-            pct_diario = 0.0
+        # Percentual de um único dia (sempre entre 0 e 100).
+        def pct_do_dia(dia):
+            dia_str_local = dia.strftime("%Y-%m-%d")
+            tarefas_no_dia = 0
+            for _, rec in todas_as_tarefas:
+                if tarefa_se_aplica(rec, dia):
+                    tarefas_no_dia += 1
+            esperado = tarefas_no_dia + 1  # +1 pela gratidão do dia
+            cursor.execute(
+                "SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1",
+                (usuario, dia_str_local)
+            )
+            feitos_tarefas = cursor.fetchone()[0]
+            cursor.execute(
+                "SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s",
+                (usuario, dia_str_local)
+            )
+            linha_grat = cursor.fetchone()
+            grat = 1 if (linha_grat and linha_grat[0] and linha_grat[0].strip()) else 0
+            feitos = feitos_tarefas + grat
+            if esperado <= 0:
+                return 0.0
+            return min(100.0, (feitos / esperado) * 100.0)
 
-        sete_dias_atras = (data_alvo - timedelta(days=7)).strftime("%Y-%m-%d")
-        cursor.execute(
-            "SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data >= %s AND data <= %s AND pago = 1", 
-            (usuario, sete_dias_atras, data_str)
-        )
-        feitos_semana_tarefas = cursor.fetchone()[0]
-        
-        cursor.execute(
-            "SELECT mensagem FROM gratidao WHERE usuario = %s AND data >= %s AND data <= %s", 
-            (usuario, sete_dias_atras, data_str)
-        )
-        gratidoes_semana = 0
-        for (msg,) in cursor.fetchall():
-            if msg and msg.strip():
-                gratidoes_semana += 1
-                
-        dias_validos_semana = min(7, dias_desde_o_inicio)
-        total_esperado_semana = total_hoje * dias_validos_semana
-        
-        if total_esperado_semana > 0:
-            pct_semanal = ((feitos_semana_tarefas + gratidoes_semana) / total_esperado_semana) * 100
-        else:
-            pct_semanal = pct_diario
+        # Diário: percentual do dia selecionado.
+        pct_diario = pct_do_dia(data_alvo)
 
-        trinta_dias_atras = (data_alvo - timedelta(days=30)).strftime("%Y-%m-%d")
-        cursor.execute(
-            "SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data >= %s AND data <= %s AND pago = 1", 
-            (usuario, trinta_dias_atras, data_str)
-        )
-        feitos_mes_tarefas = cursor.fetchone()[0]
-        
-        cursor.execute(
-            "SELECT mensagem FROM gratidao WHERE usuario = %s AND data >= %s AND data <= %s", 
-            (usuario, trinta_dias_atras, data_str)
-        )
-        gratidoes_mes = 0
-        for (msg,) in cursor.fetchall():
-            if msg and msg.strip():
-                gratidoes_mes += 1
-                
-        dias_validos_mes = min(30, dias_desde_o_inicio)
-        total_esperado_mes = total_hoje * dias_validos_mes
-        
-        if total_esperado_mes > 0:
-            pct_mensal = ((feitos_mes_tarefas + gratidoes_mes) / total_esperado_mes) * 100
-        else:
-            pct_mensal = pct_diario
+        # Texto da gratidão do dia (usado no box de dias passados).
+        _, texto_gratidao_passado = checar_gratidao_dia(cursor, usuario, data_str)
+
+        # Semanal: média dos últimos 7 dias (a partir do início do usuário).
+        soma_semana = 0.0
+        contados_semana = 0
+        for d in range(7):
+            dia = data_alvo - timedelta(days=d)
+            if dia.date() < data_inicio.date():
+                break
+            soma_semana += pct_do_dia(dia)
+            contados_semana += 1
+        pct_semanal = (soma_semana / contados_semana) if contados_semana else pct_diario
+
+        # Mensal: média dos últimos 30 dias (a partir do início do usuário).
+        soma_mes = 0.0
+        contados_mes = 0
+        for d in range(30):
+            dia = data_alvo - timedelta(days=d)
+            if dia.date() < data_inicio.date():
+                break
+            soma_mes += pct_do_dia(dia)
+            contados_mes += 1
+        pct_mensal = (soma_mes / contados_mes) if contados_mes else pct_diario
 
         conexao.close()
 
