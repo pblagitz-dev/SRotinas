@@ -637,7 +637,7 @@ def main(page: ft.Page):
         width=440,
         value="todo_dia",
         border_color=ft.Colors.GREEN_700,
-        on_change=monitorar_dropdown_recorrencia,
+        on_select=monitorar_dropdown_recorrencia,
         options=[
             ft.dropdown.Option("todo_dia", "Todo dia"),
             ft.dropdown.Option("exceto_fds", "Dias de Semana"),
