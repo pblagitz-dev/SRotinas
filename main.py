@@ -3,7 +3,7 @@ import psycopg2
 import threading
 import time
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ---------------------------------------------------------------------------
 # CONEXÃO COM O BANCO
@@ -29,6 +29,11 @@ def conectar_banco():
 # PIN mestre do desenvolvedor: abre QUALQUER perfil.
 # TROQUE o "2468" abaixo pelo seu número secreto, ou defina MASTER_PIN no Render.
 PIN_MESTRE = os.environ.get("MASTER_PIN", "2468")
+
+# Helper para garantir o horário correto de Brasília (UTC-3) independente do servidor hosting
+def obter_agora_br():
+    fuso_br = timezone(timedelta(hours=-3))
+    return datetime.now(fuso_br)
 
 def tarefa_se_aplica(recorrencia, data_alvo: datetime):
     dia_da_semana = data_alvo.weekday()
@@ -58,7 +63,7 @@ def main(page: ft.Page):
 
     estado_app = {
         "usuario": None,
-        "data_dashboard": datetime.now()
+        "data_dashboard": obter_agora_br()
     }
 
     # ==========================================
@@ -119,7 +124,7 @@ def main(page: ft.Page):
     def passo_nome_continuar(e):
         nome = (campo_login.value or "").strip().upper()
         if not nome:
-            erro_nome.value = "Digite seu nome para continuar."
+            erro_nome.value = "Digite seu nome para continue."
             page.update()
             return
         erro_nome.value = ""
@@ -172,7 +177,7 @@ def main(page: ft.Page):
         salvar_pin(nome, pin1)
         entrar_no_app(nome, novo=True)
 
-    # --- Controles dos painéis (cada controle pertence a UM painel só) ---
+    # --- Controles dos painéis ---
     campo_login = ft.TextField(
         label="Digite seu nome (sempre o mesmo)",
         width=300,
@@ -237,7 +242,7 @@ def main(page: ft.Page):
         visible=True,
     )
 
-    # --- Painel 2: digitar PIN (usuário já existe) ---
+    # --- Painel 2: digitar PIN ---
     painel_pin = ft.Column(
         controls=[
             titulo_pin,
@@ -253,7 +258,7 @@ def main(page: ft.Page):
         visible=False,
     )
 
-    # --- Painel 3: criar PIN (usuário novo ou ainda sem PIN) ---
+    # --- Painel 3: criar PIN ---
     painel_criar = ft.Column(
         controls=[
             titulo_criar,
@@ -283,7 +288,7 @@ def main(page: ft.Page):
     page.services.append(salvar_arquivo_dialog)
 
     async def exportar_diario(e):
-        mes_atual = datetime.now().strftime("%Y-%m")
+        mes_atual = obter_agora_br().strftime("%Y-%m")
         usuario = estado_app["usuario"]
         try:
             path = await salvar_arquivo_dialog.save_file_async(
@@ -359,7 +364,7 @@ def main(page: ft.Page):
         conexao = conectar_banco()
         cursor = conexao.cursor()
         streak = 0
-        hoje = datetime.now()
+        hoje = obter_agora_br()
 
         cursor.execute("SELECT id, recorrencia FROM tarefas WHERE usuario = %s", (usuario,))
         todas_tarefas = cursor.fetchall()
@@ -402,13 +407,13 @@ def main(page: ft.Page):
     def atualizar_relogio():
         while True:
             try:
-                agora = datetime.now()
+                agora = obter_agora_br()
                 data_formatada = agora.strftime("%d/%m/%Y")
                 dia_nome = DIAS_SEMANA[agora.weekday()]
                 hora_formatada = agora.strftime("%H:%M:%S")
                 
                 texto_usuario.value = f"👤 {estado_app['usuario']}"
-                relogio_digital.value = f"🗓️ {data_formatada}   ⏰ {hora_formatada}"
+                relogio_digital.value = f"🗓️ {data_formatada}    ⏰ {hora_formatada}"
                 page.update()
                 time.sleep(1)
             except:
@@ -418,7 +423,7 @@ def main(page: ft.Page):
 
     def alternar_check(e, id_tarefa):
         usuario = estado_app["usuario"]
-        data_hoje = datetime.now().strftime("%Y-%m-%d")
+        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
         conexao = conectar_banco()
         cursor = conexao.cursor()
         
@@ -517,7 +522,7 @@ def main(page: ft.Page):
 
     def carregar_tarefas():
         lista_tarefas.controls.clear()
-        agora = datetime.now()
+        agora = obter_agora_br()
         data_hoje = agora.strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         
@@ -643,10 +648,8 @@ def main(page: ft.Page):
 
     # ------------------------------------------------------------------
     # GRATIDÃO DINÂMICA (várias gratidões por dia, com editar/excluir)
-    # Guardamos os itens do dia numa lista e persistimos juntos (1 linha
-    # por dia no banco, separados por quebra de linha) — sem mexer no schema.
     # ------------------------------------------------------------------
-    gratidoes_hoje = []                       # itens de gratidão de hoje (strings)
+    gratidoes_hoje = []                       
     lista_gratidao_ui = ft.Column(spacing=8, width=440)
 
     campo_nova_gratidao = ft.TextField(
@@ -660,8 +663,7 @@ def main(page: ft.Page):
     )
 
     def persistir_gratidoes():
-        """Salva a lista do dia no banco (junta em 1 linha por dia)."""
-        data_hoje = datetime.now().strftime("%Y-%m-%d")
+        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         itens = [g.strip() for g in gratidoes_hoje if g.strip()]
         conexao = conectar_banco()
@@ -756,7 +758,7 @@ def main(page: ft.Page):
             renderizar_gratidoes()
 
     def carregar_gratidoes():
-        data_hoje = datetime.now().strftime("%Y-%m-%d")
+        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         conexao = conectar_banco()
         cursor = conexao.cursor()
@@ -873,7 +875,7 @@ def main(page: ft.Page):
 
     def mudar_data_dashboard(delta):
         nova_data = estado_app["data_dashboard"] + timedelta(days=delta)
-        if nova_data.date() <= datetime.now().date():
+        if nova_data.date() <= obter_agora_br().date():
             estado_app["data_dashboard"] = nova_data
             atualizar_dashboard()
 
@@ -945,7 +947,7 @@ def main(page: ft.Page):
         cursor = conexao.cursor()
         
         data_alvo = estado_app["data_dashboard"]
-        hoje_real = datetime.now()
+        hoje_real = obter_agora_br()
         
         if data_alvo.date() == hoje_real.date():
             texto_data_dashboard.value = "Hoje"
@@ -973,16 +975,14 @@ def main(page: ft.Page):
             primeira_data_str = data_str
             
         data_inicio = datetime.strptime(primeira_data_str, "%Y-%m-%d")
-        dias_desde_o_inicio = max(1, (data_alvo - data_inicio).days + 1)
             
-        # Percentual de um único dia (sempre entre 0 e 100).
         def pct_do_dia(dia):
             dia_str_local = dia.strftime("%Y-%m-%d")
             tarefas_no_dia = 0
             for _, rec in todas_as_tarefas:
                 if tarefa_se_aplica(rec, dia):
                     tarefas_no_dia += 1
-            esperado = tarefas_no_dia + 1  # +1 pela gratidão do dia
+            esperado = tarefas_no_dia + 1  
             cursor.execute(
                 "SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1",
                 (usuario, dia_str_local)
@@ -993,19 +993,16 @@ def main(page: ft.Page):
                 (usuario, dia_str_local)
             )
             linha_grat = cursor.fetchone()
-            grat = 1 if (linha_grat and linha_grat[0] and linha_grat[0].strip()) else 0
+            grat = 1 if (linha_grat and merge_grat := linha_grat[0] and linha_grat[0].strip()) else 0
             feitos = feitos_tarefas + grat
             if esperado <= 0:
                 return 0.0
             return min(100.0, (feitos / esperado) * 100.0)
 
-        # Diário: percentual do dia selecionado.
         pct_diario = pct_do_dia(data_alvo)
 
-        # Texto da gratidão do dia (usado no box de dias passados).
         _, texto_gratidao_passado = checar_gratidao_dia(cursor, usuario, data_str)
 
-        # Semanal: média dos últimos 7 dias (a partir do início do usuário).
         soma_semana = 0.0
         contados_semana = 0
         for d in range(7):
@@ -1016,7 +1013,6 @@ def main(page: ft.Page):
             contados_semana += 1
         pct_semanal = (soma_semana / contados_semana) if contados_semana else pct_diario
 
-        # Mensal: média dos últimos 30 dias (a partir do início do usuário).
         soma_mes = 0.0
         contados_mes = 0
         for d in range(30):
@@ -1052,13 +1048,15 @@ def main(page: ft.Page):
                 width=440
             )
 
+        # Alteração solicitada: Texto explicativo de subnotação adicionado logo acima dos anéis
         conteudo_dashboard.controls.extend([
             ft.Divider(), 
             linha_maquina_tempo, 
             ft.Container(height=10), 
             ft.Text("🏆 Central de Metas", size=24, weight=ft.FontWeight.BOLD), 
             ft.Text("Complete os anéis e vença mais um dia!", size=14, color=ft.Colors.GREY_400), 
-            ft.Container(height=20), 
+            ft.Text("conclusão de tarefas + o diário de gratidão", size=11, color=ft.Colors.GREY_500, italic=True),
+            ft.Container(height=15), 
             linha_graficos, 
             ft.Container(height=10), 
             box_gratidao_passado
@@ -1073,7 +1071,7 @@ def main(page: ft.Page):
         usuario = estado_app["usuario"]
         conexao = conectar_banco()
         cursor = conexao.cursor()
-        mes_atual = datetime.now().strftime("%Y-%m")
+        mes_atual = obter_agora_br().strftime("%Y-%m")
         
         cursor.execute(
             "SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", 
@@ -1120,8 +1118,6 @@ def main(page: ft.Page):
             lista_registros
         ])
 
-    # As três telas ficam sempre montadas; alternamos apenas a visibilidade.
-    # Isso evita mover controles de "pai" (causa do bug de abas trocadas).
     conteudo_dashboard.visible = False
     conteudo_diario.visible = False
     visual_atual = ft.Column(
@@ -1143,7 +1139,7 @@ def main(page: ft.Page):
         page.update()
 
     def alternar_para_dashboard(e=None):
-        estado_app["data_dashboard"] = datetime.now()
+        estado_app["data_dashboard"] = obter_agora_br()
         atualizar_dashboard()
         conteudo_checklist.visible = False
         conteudo_dashboard.visible = True
