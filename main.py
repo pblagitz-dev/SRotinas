@@ -171,24 +171,42 @@ def main(page: ft.Page):
             page.snack_bar.open = True
             page.update()
 
+    texto_usuario = ft.Text(
+        value="",
+        size=15,
+        weight=ft.FontWeight.BOLD,
+        color=ft.Colors.BLUE_200,
+        width=360,
+    )
+
+    texto_ofensiva = ft.Text(
+        value="🔥 0 dias",
+        size=15,
+        weight=ft.FontWeight.BOLD,
+        color=ft.Colors.ORANGE_500,
+        width=100,
+        text_align=ft.TextAlign.RIGHT,
+    )
+
     relogio_digital = ft.Text(
-        value="", 
-        size=16, 
-        weight=ft.FontWeight.BOLD, 
-        color=ft.Colors.GREEN_ACCENT, 
+        value="",
+        size=14,
+        weight=ft.FontWeight.BOLD,
+        color=ft.Colors.GREEN_ACCENT,
         style=ft.TextStyle(font_family="Courier New")
     )
-    
-    texto_ofensiva = ft.Text(
-        value="🔥 0 dias", 
-        size=16, 
-        weight=ft.FontWeight.BOLD, 
-        color=ft.Colors.ORANGE_500
-    )
-    
-    cabecalho = ft.Row(
-        controls=[relogio_digital, texto_ofensiva], 
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN, 
+
+    cabecalho = ft.Column(
+        controls=[
+            ft.Row(
+                controls=[texto_usuario, texto_ofensiva],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                width=480
+            ),
+            relogio_digital,
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=4,
         width=480
     )
     
@@ -226,7 +244,7 @@ def main(page: ft.Page):
                 (usuario, data_str)
             )
             row = cursor.fetchone()
-            if row and len(row[0].split()) > 3:
+            if row and row[0] and row[0].strip():
                 feitos += 1
 
             if total_esperado > 0 and feitos >= total_esperado:
@@ -247,7 +265,8 @@ def main(page: ft.Page):
                 dia_nome = DIAS_SEMANA[agora.weekday()]
                 hora_formatada = agora.strftime("%H:%M:%S")
                 
-                relogio_digital.value = f"👤 {estado_app['usuario']} | 🗓️ {data_formatada} | ⏰ {hora_formatada}"
+                texto_usuario.value = f"👤 {estado_app['usuario']}"
+                relogio_digital.value = f"🗓️ {data_formatada}   ⏰ {hora_formatada}"
                 page.update()
                 time.sleep(1)
             except:
@@ -665,15 +684,17 @@ def main(page: ft.Page):
             [
                 ft.Text("📋 Minha Rotina", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT),
                 ft.Text("Cadastre as tarefas que se repetem no seu dia.", size=13, color=ft.Colors.GREY_400),
-                ft.Container(height=4),
+                ft.Container(height=6),
                 campo_nova_tarefa,
+                ft.Container(height=4),
                 seletor_recorrencia,
                 linha_dias_semana,
+                ft.Container(height=10),
                 botao_adicionar,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10
         ),
-        padding=15, border_radius=12, bgcolor=ft.Colors.GREY_900,
+        padding=18, border_radius=12, bgcolor=ft.Colors.GREY_900,
         border=ft.Border.all(1, ft.Colors.GREEN_900), width=480,
     )
 
@@ -762,7 +783,7 @@ def main(page: ft.Page):
     def checar_gratidao_dia(cursor, usuario, data_str):
         cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_str))
         row = cursor.fetchone()
-        if row and len(row[0].split()) > 3: 
+        if row and row[0] and row[0].strip():
             return 1, row[0]
         return 0, ""
 
@@ -831,7 +852,7 @@ def main(page: ft.Page):
         )
         gratidoes_semana = 0
         for (msg,) in cursor.fetchall():
-            if len(msg.split()) > 3:
+            if msg and msg.strip():
                 gratidoes_semana += 1
                 
         dias_validos_semana = min(7, dias_desde_o_inicio)
@@ -855,7 +876,7 @@ def main(page: ft.Page):
         )
         gratidoes_mes = 0
         for (msg,) in cursor.fetchall():
-            if len(msg.split()) > 3:
+            if msg and msg.strip():
                 gratidoes_mes += 1
                 
         dias_validos_mes = min(30, dias_desde_o_inicio)
