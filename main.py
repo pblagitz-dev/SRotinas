@@ -105,11 +105,11 @@ def main(page: ft.Page):
             
             # Mostra o feedback de login para o usuário
             if is_novo_usuario:
-                aviso_login = ft.SnackBar(ft.Text(f"🎉 Novo perfil '{nome_digitado}' criado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
+                page.snack_bar = ft.SnackBar(ft.Text(f"🎉 Novo perfil '{nome_digitado}' criado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
             else:
-                aviso_login = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome_digitado}!"), bgcolor=ft.Colors.BLUE_800)
+                page.snack_bar = ft.SnackBar(ft.Text(f"👋 Bem-vindo de volta, {nome_digitado}!"), bgcolor=ft.Colors.BLUE_800)
 
-            page.open(aviso_login)
+            page.snack_bar.open = True
             page.update()
 
     botao_entrar = ft.FilledButton(
@@ -167,7 +167,8 @@ def main(page: ft.Page):
                     data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
                     f.write(f"[{data_br}]\n{msg}\n\n")
             
-            page.open(ft.SnackBar(ft.Text("Diário exportado com sucesso!"), bgcolor=ft.Colors.GREEN_800))
+            page.snack_bar = ft.SnackBar(ft.Text("Diário exportado com sucesso!"), bgcolor=ft.Colors.GREEN_800)
+            page.snack_bar.open = True
             page.update()
 
     relogio_digital = ft.Text(
@@ -328,11 +329,12 @@ def main(page: ft.Page):
                 )
                 conexao.commit()
                 conexao.close()
-                page.close(dialogo)
+                dialogo.open = False
                 carregar_tarefas()
 
         def cancelar_edicao(e):
-            page.close(dialogo)
+            dialogo.open = False
+            page.update()
 
         dialogo = ft.AlertDialog(
             title=ft.Text("✏️ Editar Tarefa"),
@@ -344,7 +346,9 @@ def main(page: ft.Page):
             actions_alignment=ft.MainAxisAlignment.END,
         )
         
-        page.open(dialogo)
+        page.dialog = dialogo
+        dialogo.open = True
+        page.update()
 
     def atualizar_streak_ui():
         texto_ofensiva.value = f"🔥 {calcular_ofensiva()} dias"
@@ -580,7 +584,6 @@ def main(page: ft.Page):
             persistir_gratidoes()
             campo_nova_gratidao.value = ""
             renderizar_gratidoes()
-            campo_nova_gratidao.focus()
 
     def carregar_gratidoes():
         data_hoje = datetime.now().strftime("%Y-%m-%d")
