@@ -993,7 +993,7 @@ def main(page: ft.Page):
                 (usuario, dia_str_local)
             )
             linha_grat = cursor.fetchone()
-            grat = 1 if (linha_grat and merge_grat := linha_grat[0] and linha_grat[0].strip()) else 0
+            grat = 1 if (linha_grat and linha_grat[0] and linha_grat[0].strip()) else 0
             feitos = feitos_tarefas + grat
             if esperado <= 0:
                 return 0.0
@@ -1048,7 +1048,6 @@ def main(page: ft.Page):
                 width=440
             )
 
-        # Alteração solicitada: Texto explicativo de subnotação adicionado logo acima dos anéis
         conteudo_dashboard.controls.extend([
             ft.Divider(), 
             linha_maquina_tempo, 
