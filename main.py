@@ -191,6 +191,13 @@ def main(page: ft.Page):
         capitalization=ft.TextCapitalization.CHARACTERS,
         on_submit=passo_nome_continuar,
     )
+    # Marca o campo como "nome de usuário" para o navegador parar de sugerir
+    # cartão de crédito. Em try/except: se a versão do Flet não tiver esse enum,
+    # apenas ignora, sem quebrar o app.
+    try:
+        campo_login.autofill_hints = [ft.AutofillHint.USERNAME]
+    except Exception:
+        pass
     erro_nome = ft.Text("", color=ft.Colors.RED_400, size=13)
     spinner_nome = ft.ProgressRing(visible=False, width=22, height=22, color=ft.Colors.GREEN_ACCENT)
 
@@ -654,7 +661,7 @@ def main(page: ft.Page):
                 alignment=ft.MainAxisAlignment.CENTER, spacing=6
             )
             botao_adicionar.disabled = True
-            botao_adicionar.update()
+            page.update()
 
             if recorrencia_escolhida == "especifico":
                 dias_finais = []
@@ -807,7 +814,7 @@ def main(page: ft.Page):
                 alignment=ft.MainAxisAlignment.CENTER, spacing=6
             )
             botao_adicionar_gratidao.disabled = True
-            botao_adicionar_gratidao.update()
+            page.update()
 
             gratidoes_hoje.append(texto)
             persistir_gratidoes()
@@ -975,7 +982,7 @@ def main(page: ft.Page):
                 alignment=ft.MainAxisAlignment.CENTER, spacing=6
             )
             botao_adicionar_pedido.disabled = True
-            botao_adicionar_pedido.update()
+            page.update()
 
             pedidos_hoje.append(texto)
             persistir_pedidos()
