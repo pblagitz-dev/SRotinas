@@ -52,6 +52,10 @@ def tarefa_se_aplica(recorrencia, data_alvo: datetime):
         if str(dia_da_semana) in recorrencia.split(","):
             return True
             
+    # Lógica para "Somente hoje": verifica se a recorrência é a data exata no formato YYYY-MM-DD
+    if len(recorrencia) == 10 and "-" in recorrencia:
+        return recorrencia == data_alvo.strftime("%Y-%m-%d")
+            
     return False
 
 def main(page: ft.Page):
@@ -461,6 +465,8 @@ def main(page: ft.Page):
         
         if "," in recorrencia_atual or recorrencia_atual.isdigit():
             valor_dropdown_atual = "especifico"
+        elif "-" in recorrencia_atual and len(recorrencia_atual) == 10:
+            valor_dropdown_atual = "somente_hoje"
         else:
             valor_dropdown_atual = recorrencia_atual
         
@@ -470,6 +476,7 @@ def main(page: ft.Page):
             value=valor_dropdown_atual, 
             border_color=ft.Colors.BLUE_400,
             options=[
+                ft.dropdown.Option("somente_hoje", "Somente hoje"),
                 ft.dropdown.Option("todo_dia", "Todo dia"),
                 ft.dropdown.Option("exceto_fds", "Dias de Semana"), 
                 ft.dropdown.Option("apenas_fds", "Finais de Semana"),
@@ -484,7 +491,12 @@ def main(page: ft.Page):
             if nova_recorrencia == "especifico" and valor_dropdown_atual != "especifico": 
                 nova_recorrencia = "todo_dia" 
             elif valor_dropdown_atual == "especifico" and nova_recorrencia == "especifico": 
-                nova_recorrencia = recorrencia_atual 
+                nova_recorrencia = recorrencia_atual
+            elif nova_recorrencia == "somente_hoje":
+                if valor_dropdown_atual == "somente_hoje":
+                    nova_recorrencia = recorrencia_atual
+                else:
+                    nova_recorrencia = obter_agora_br().strftime("%Y-%m-%d")
 
             if novo_nome != "":
                 conexao = conectar_banco()
@@ -596,11 +608,13 @@ def main(page: ft.Page):
     
     lista_chks_dias = [chk_seg, chk_ter, chk_qua, chk_qui, chk_sex, chk_sab, chk_dom]
     
+    # Ajuste: wrap=True permite que os itens quebrem a linha caso a tela seja pequena
     linha_dias_semana = ft.Row(
         controls=lista_chks_dias, 
         alignment=ft.MainAxisAlignment.CENTER, 
         spacing=5, 
-        visible=False
+        visible=False,
+        wrap=True
     )
 
     def monitorar_dropdown_recorrencia(e):
@@ -626,6 +640,8 @@ def main(page: ft.Page):
                     recorrencia_salvar = ",".join(dias_finais) 
                 else:
                     recorrencia_salvar = "todo_dia"
+            elif recorrencia_escolhida == "somente_hoje":
+                recorrencia_salvar = obter_agora_br().strftime("%Y-%m-%d")
             else:
                 recorrencia_salvar = recorrencia_escolhida
 
@@ -642,7 +658,7 @@ def main(page: ft.Page):
                 chk.value = False
                 
             linha_dias_semana.visible = False
-            seletor_recorrencia.value = "todo_dia"
+            seletor_recorrencia.value = "somente_hoje"
             campo_nova_tarefa.value = ""
             carregar_tarefas()
 
@@ -784,7 +800,8 @@ def main(page: ft.Page):
         content=ft.Column(
             [
                 ft.Text("🙏 Diário de Gratidão de Hoje", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
-                ft.Text("Registre pelo que você é grato. Pode adicionar quantas quiser.", size=13, color=ft.Colors.GREY_400),
+                # Ajuste: Atualização da frase com a alteração solicitada
+                ft.Text("Registre pelo que você foi grato no dia anterior. Pode adicionar quantas quiser.", size=13, color=ft.Colors.GREY_400),
                 ft.Container(height=4),
                 lista_gratidao_ui,
                 ft.Container(height=4),
@@ -810,10 +827,11 @@ def main(page: ft.Page):
     seletor_recorrencia = ft.Dropdown(
         label="Com que frequência?",
         width=440,
-        value="todo_dia",
+        value="somente_hoje",  # Ajuste: Somente hoje é o padrão
         border_color=ft.Colors.GREEN_700,
         on_select=monitorar_dropdown_recorrencia,
         options=[
+            ft.dropdown.Option("somente_hoje", "Somente hoje"),
             ft.dropdown.Option("todo_dia", "Todo dia"),
             ft.dropdown.Option("exceto_fds", "Dias de Semana"),
             ft.dropdown.Option("apenas_fds", "Finais de Semana"),
