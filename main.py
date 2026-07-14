@@ -163,7 +163,7 @@ def main(page: ft.Page):
     def passo_nome_continuar(e):
         nome = (campo_login.value or "").strip().upper()
         if not nome:
-            erro_nome.value = "Digite seu nome para continue."
+            erro_nome.value = "Digite seu nome para continuar."
             page.update()
             return
         erro_nome.value = ""
@@ -223,7 +223,7 @@ def main(page: ft.Page):
         text_align=ft.TextAlign.CENTER,
         autofocus=True,
         capitalization=ft.TextCapitalization.CHARACTERS,
-        autofill_hints=[ft.AutofillHint.NAME], # Resolvendo o aviso de Cartão de Crédito
+        autofill_hints=[ft.AutofillHint.NAME], 
         on_submit=passo_nome_continuar,
     )
     erro_nome = ft.Text("", color=ft.Colors.RED_400, size=13)
@@ -554,17 +554,20 @@ def main(page: ft.Page):
             if not tarefa_se_aplica(recorrencia, agora): 
                 continue
             ja_feito = id_tarefa in ids_feitos_hoje
+            
             checkbox = ft.Checkbox(
                 label=nome_tarefa, value=ja_feito, fill_color=ft.Colors.GREEN_600, check_color=ft.Colors.WHITE,
                 label_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
-                on_change=lambda e, id_t=id_tarefa: alternar_check(e, id_t)
+                on_change=lambda e, id_t=id_tarefa: alternar_check(e, id_t), expand=True
             )
+            
             botao_editar = ft.IconButton(
-                icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.BLUE_400, 
+                icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.BLUE_400, icon_size=18,
                 on_click=lambda e, id_t=id_tarefa, n=nome_tarefa, r=recorrencia: abrir_dialogo_edicao(e, id_t, n, r)
             )
+            
             botao_lixo = ft.IconButton(
-                icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, 
+                icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, icon_size=18,
                 on_click=lambda e, id_t=id_tarefa: deletar_tarefa(e, id_t)
             )
             
@@ -653,11 +656,11 @@ def main(page: ft.Page):
         conexao.close()
 
     def criar_linha_gratidao(indice, texto_item):
-        rotulo = ft.Text(f"🙏 {texto_item}", expand=True, color=ft.Colors.WHITE) # Design flexível
-        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.BLUE_400, on_click=lambda e, i=indice: iniciar_edicao_gratidao(i))
-        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_gratidao(i))
+        rotulo = ft.Text(f"🙏 {texto_item}", expand=True, color=ft.Colors.WHITE) 
+        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_size=18, icon_color=ft.Colors.BLUE_400, on_click=lambda e, i=indice: iniciar_edicao_gratidao(i))
+        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=18, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_gratidao(i))
         return ft.Container(
-            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), # Espaçamento zero
+            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.GREY_800), width=440,
         )
 
@@ -672,7 +675,7 @@ def main(page: ft.Page):
 
     def iniciar_edicao_gratidao(indice):
         campo_edit = ft.TextField(
-            value=gratidoes_hoje[indice], expand=True, # Design expansivo
+            value=gratidoes_hoje[indice], expand=True,
             multiline=True, min_lines=1, max_lines=3, border_color=ft.Colors.BLUE_400
         )
         def salvar_edit(e):
@@ -687,9 +690,9 @@ def main(page: ft.Page):
         linha_edicao = ft.Container(
             content=ft.Row(
                 [campo_edit, ft.Row([
-                    ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
-                    ft.IconButton(icon=ft.Icons.CLOSE, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_gratidoes()),
-                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN # Espaçamento zero
+                    ft.IconButton(icon=ft.Icons.CHECK, icon_size=18, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_gratidoes()),
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN 
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.BLUE_400), width=440,
         )
         lista_gratidao_ui.controls[indice] = linha_edicao
@@ -785,11 +788,11 @@ def main(page: ft.Page):
         conexao.close()
 
     def criar_linha_afirmacao(indice, texto_item):
-        rotulo = ft.Text(f"🎤 {texto_item}", expand=True, color=ft.Colors.WHITE) # Microfone e ajuste expansivo
-        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.PURPLE_300, on_click=lambda e, i=indice: iniciar_edicao_afirmacao(i))
-        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_afirmacao(i))
+        rotulo = ft.Text(f"🎤 {texto_item}", expand=True, color=ft.Colors.WHITE) 
+        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_size=18, icon_color=ft.Colors.PURPLE_300, on_click=lambda e, i=indice: iniciar_edicao_afirmacao(i))
+        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=18, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_afirmacao(i))
         return ft.Container(
-            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), # Espaçamento zero
+            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.GREY_800), width=440,
         )
 
@@ -804,7 +807,7 @@ def main(page: ft.Page):
 
     def iniciar_edicao_afirmacao(indice):
         campo_edit = ft.TextField(
-            value=afirmacoes_hoje[indice], expand=True, # Design expansivo
+            value=afirmacoes_hoje[indice], expand=True, 
             multiline=True, min_lines=1, max_lines=3, border_color=ft.Colors.PURPLE_400
         )
         def salvar_edit(e):
@@ -819,9 +822,9 @@ def main(page: ft.Page):
         linha_edicao = ft.Container(
             content=ft.Row(
                 [campo_edit, ft.Row([
-                    ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
-                    ft.IconButton(icon=ft.Icons.CLOSE, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_afirmacoes()),
-                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN # Espaçamento zero
+                    ft.IconButton(icon=ft.Icons.CHECK, icon_size=18, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_afirmacoes()),
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.PURPLE_400), width=440,
         )
         lista_afirmacoes_ui.controls[indice] = linha_edicao
@@ -918,11 +921,11 @@ def main(page: ft.Page):
         conexao.close()
 
     def criar_linha_pedido(indice, texto_item):
-        rotulo = ft.Text(f"✨ {texto_item}", expand=True, color=ft.Colors.WHITE) # Design flexível
-        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.YELLOW_600, on_click=lambda e, i=indice: iniciar_edicao_pedido(i))
-        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_pedido(i))
+        rotulo = ft.Text(f"✨ {texto_item}", expand=True, color=ft.Colors.WHITE) 
+        botao_editar = ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_size=18, icon_color=ft.Colors.YELLOW_600, on_click=lambda e, i=indice: iniciar_edicao_pedido(i))
+        botao_excluir = ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=18, icon_color=ft.Colors.RED_400, on_click=lambda e, i=indice: excluir_pedido(i))
         return ft.Container(
-            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), # Espaço zero
+            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.YELLOW_900), width=440,
         )
 
@@ -937,7 +940,7 @@ def main(page: ft.Page):
 
     def iniciar_edicao_pedido(indice):
         campo_edit = ft.TextField(
-            value=pedidos_hoje[indice], expand=True, # Design expansível
+            value=pedidos_hoje[indice], expand=True, 
             multiline=True, min_lines=1, max_lines=3, border_color=ft.Colors.YELLOW_600
         )
         def salvar_edit(e):
@@ -952,9 +955,9 @@ def main(page: ft.Page):
         linha_edicao = ft.Container(
             content=ft.Row(
                 [campo_edit, ft.Row([
-                    ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
-                    ft.IconButton(icon=ft.Icons.CLOSE, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_pedidos()),
-                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN # Espaço zero
+                    ft.IconButton(icon=ft.Icons.CHECK, icon_size=18, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
+                    ft.IconButton(icon=ft.Icons.CLOSE, icon_size=18, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_pedidos()),
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.YELLOW_600), width=440,
         )
         lista_pedidos_ui.controls[indice] = linha_edicao
@@ -1159,8 +1162,8 @@ def main(page: ft.Page):
 
         linha_graficos = ft.Row(
             controls=[criar_card_pizza("Diário", pct_diario), criar_card_pizza("Semanal", pct_semanal), criar_card_pizza("Mensal", pct_mensal)], 
-            alignment=ft.MainAxisAlignment.START, # Scroll Amigável para Telas Menores
-            spacing=10, scroll=ft.ScrollMode.AUTO # Scroll Amigável para Telas Menores
+            alignment=ft.MainAxisAlignment.START, 
+            spacing=10, scroll=ft.ScrollMode.AUTO 
         )
 
         conteudo_dashboard.controls.extend([
@@ -1269,8 +1272,8 @@ def main(page: ft.Page):
     
     linha_abas_custom = ft.Row(
         controls=[botao_menu_checklist, botao_menu_dashboard, botao_menu_diario], 
-        alignment=ft.MainAxisAlignment.START, # Scroll Amigável para Telas Menores
-        spacing=10, scroll=ft.ScrollMode.AUTO # Scroll Amigável para Telas Menores
+        alignment=ft.MainAxisAlignment.START, 
+        spacing=10, scroll=ft.ScrollMode.AUTO 
     )
 
     page.add(tela_login)
