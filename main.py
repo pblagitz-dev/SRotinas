@@ -53,7 +53,7 @@ def main(page: ft.Page):
     estado_app = {
         "usuario": None,
         "data_dashboard": obter_agora_br(),
-        "data_checklist": obter_agora_br() # Controle de Hoje vs Ontem
+        "data_checklist": obter_agora_br()
     }
 
     # ==========================================
@@ -400,7 +400,7 @@ def main(page: ft.Page):
                 fechar_dialogo(e)
                 carregar_tarefas()
 
-        dialogo.content = ft.Column([campo_nome_edit, seletor_rec_edit], tight=True)
+        dialogo.content = ft.Column([campo_nome_edit, seletor_rec_edit])
         dialogo.actions = [
             ft.TextButton("Cancelar", on_click=fechar_dialogo, style=ft.ButtonStyle(color=ft.Colors.RED_400)),
             ft.TextButton("Salvar", on_click=salvar_alteracoes, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
@@ -409,7 +409,7 @@ def main(page: ft.Page):
         try:
             page.open(dialogo)
         except AttributeError:
-            page.overlay.append(dialogo)
+            page.dialog = dialogo
             dialogo.open = True
             page.update()
 
@@ -454,7 +454,7 @@ def main(page: ft.Page):
                 on_click=lambda e, id_t=id_tarefa: deletar_tarefa(e, id_t)
             )
             
-            linha_container.content = ft.Row([checkbox, ft.Row([botao_editar, botao_lixo], spacing=0, tight=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            linha_container.content = ft.Row([checkbox, ft.Row([botao_editar, botao_lixo], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
             lista_tarefas.controls.append(linha_container)
             
         carregar_gratidoes(cursor)
@@ -489,7 +489,7 @@ def main(page: ft.Page):
                 dias_finais = [str(i) for i, chk in enumerate(lista_chks_dias) if chk.value]
                 recorrencia_salvar = ",".join(dias_finais) if dias_finais else "todo_dia"
             elif recorrencia_escolhida == "somente_hoje":
-                recorrencia_salvar = obter_agora_br().strftime("%Y-%m-%d") # Salva com a data REAL de hoje
+                recorrencia_salvar = obter_agora_br().strftime("%Y-%m-%d")
             else:
                 recorrencia_salvar = recorrencia_escolhida
 
@@ -519,7 +519,7 @@ def main(page: ft.Page):
             padding=0, width=28, height=28, on_click=on_excluir 
         )
         return ft.Container(
-            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0, tight=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            content=ft.Row([rotulo, ft.Row([botao_editar, botao_excluir], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, cor_borda), width=440,
         )
 
@@ -573,7 +573,7 @@ def main(page: ft.Page):
                 [campo_edit, ft.Row([
                     ft.IconButton(icon=ft.Icons.CHECK, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
                     ft.IconButton(icon=ft.Icons.CLOSE, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_gratidoes()),
-                ], spacing=0, tight=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN 
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN 
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.BLUE_400), width=440,
         )
         lista_gratidao_ui.controls[indice] = linha_edicao
@@ -621,7 +621,7 @@ def main(page: ft.Page):
         content=ft.Column(
             [
                 ft.Text("🙏 Diário de Gratidão", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
-                ft.Text("Registre pelo que você foi grato no dia anterior.", size=13, color=ft.Colors.GREY_400),
+                ft.Text("Registre pelo que você foi grato.", size=13, color=ft.Colors.GREY_400),
                 ft.Container(height=4), lista_gratidao_ui, ft.Container(height=4),
                 campo_nova_gratidao, botao_adicionar_gratidao
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10
@@ -679,7 +679,7 @@ def main(page: ft.Page):
                 [campo_edit, ft.Row([
                     ft.IconButton(icon=ft.Icons.CHECK, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
                     ft.IconButton(icon=ft.Icons.CLOSE, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_afirmacoes()),
-                ], spacing=0, tight=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.PURPLE_400), width=440,
         )
         lista_afirmacoes_ui.controls[indice] = linha_edicao
@@ -786,7 +786,7 @@ def main(page: ft.Page):
                 [campo_edit, ft.Row([
                     ft.IconButton(icon=ft.Icons.CHECK, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREEN_ACCENT, on_click=salvar_edit),
                     ft.IconButton(icon=ft.Icons.CLOSE, icon_size=16, padding=0, width=28, height=28, icon_color=ft.Colors.GREY_400, on_click=lambda e: renderizar_pedidos()),
-                ], spacing=0, tight=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ], spacing=0)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN
             ), bgcolor=ft.Colors.GREY_900, padding=10, border_radius=8, border=ft.Border.all(1, ft.Colors.YELLOW_600), width=440,
         )
         lista_pedidos_ui.controls[indice] = linha_edicao
@@ -1048,7 +1048,7 @@ def main(page: ft.Page):
         botao_menu_diario.bgcolor = ft.Colors.GREY_800
 
     def alternar_para_checklist(e=None):
-        estado_app["data_checklist"] = obter_agora_br() # Volta pra hoje por padrão
+        estado_app["data_checklist"] = obter_agora_br() 
         mudar_dia_checklist("atual")
         conteudo_checklist.visible = True
         conteudo_dashboard.visible = False
