@@ -1,4 +1,3 @@
-```python
 import flet as ft
 import psycopg2
 import threading
@@ -53,7 +52,8 @@ def main(page: ft.Page):
 
     estado_app = {
         "usuario": None,
-        "data_dashboard": obter_agora_br()
+        "data_dashboard": obter_agora_br(),
+        "data_checklist": obter_agora_br() # Controle de Hoje vs Ontem
     }
 
     # ==========================================
@@ -91,7 +91,8 @@ def main(page: ft.Page):
 
     def entrar_no_app(nome, novo):
         estado_app["usuario"] = nome
-        registrar_acesso_hoje(nome) # Registra o login para o foguinho!
+        estado_app["data_checklist"] = obter_agora_br()
+        registrar_acesso_hoje(nome) 
         
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
@@ -175,7 +176,6 @@ def main(page: ft.Page):
         salvar_pin(nome, pin1)
         entrar_no_app(nome, novo=True)
 
-    # --- Elementos da Tela de Login ---
     campo_login = ft.TextField(
         label="Digite seu nome (sempre o mesmo)", width=300, border_color=ft.Colors.GREEN_700,
         text_align=ft.TextAlign.CENTER, autofocus=True, capitalization=ft.TextCapitalization.CHARACTERS,
@@ -251,7 +251,6 @@ def main(page: ft.Page):
     )
 
     def atualizar_relogio():
-        # Esta função foi otimizada para NÃO dar page.update(), evitando as piscadas.
         while True:
             try:
                 agora = obter_agora_br()
@@ -259,7 +258,6 @@ def main(page: ft.Page):
                 hora_formatada = agora.strftime("%H:%M:%S")
                 texto_usuario.value = f"👤 {estado_app['usuario']}"
                 relogio_digital.value = f"🗓️ {data_formatada}    ⏰ {hora_formatada}"
-                
                 texto_usuario.update()
                 relogio_digital.update()
                 time.sleep(1)
@@ -299,29 +297,52 @@ def main(page: ft.Page):
             pass
 
     # ==========================================
+    # NAVEGAÇÃO DE DIAS (HOJE/ONTEM)
+    # ==========================================
+    btn_dia_anterior = ft.TextButton("⬅️ Dia Anterior", icon_color=ft.Colors.BLUE_400, on_click=lambda e: mudar_dia_checklist("anterior"))
+    btn_dia_atual = ft.TextButton("Dia Atual ➡️", icon_color=ft.Colors.BLUE_400, visible=False, on_click=lambda e: mudar_dia_checklist("atual"))
+    
+    linha_navegacao_dias = ft.Row([btn_dia_anterior, btn_dia_atual], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=460)
+    titulo_tarefas_dia = ft.Text("✅ Tarefas de hoje", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT)
+
+    def mudar_dia_checklist(alvo):
+        if alvo == "anterior":
+            estado_app["data_checklist"] = obter_agora_br() - timedelta(days=1)
+            btn_dia_anterior.visible = False
+            btn_dia_atual.visible = True
+            titulo_tarefas_dia.value = "✅ Tarefas de Ontem"
+        else:
+            estado_app["data_checklist"] = obter_agora_br()
+            btn_dia_anterior.visible = True
+            btn_dia_atual.visible = False
+            titulo_tarefas_dia.value = "✅ Tarefas de Hoje"
+            
+        btn_dia_anterior.update()
+        btn_dia_atual.update()
+        titulo_tarefas_dia.update()
+        carregar_tarefas()
+
+    # ==========================================
     # LÓGICA DE TAREFAS DA ROTINA (CHECKLIST)
     # ==========================================
     lista_tarefas = ft.Column()
 
     def alternar_check(e, id_tarefa, linha_container):
-        # Esta função foi otimizada para NÃO recarregar a lista e evitar piscadas.
         usuario = estado_app["usuario"]
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         marcado = e.control.value
         
-        # 1. Muda a cor visualmente na mesma hora sem piscar
         linha_container.bgcolor = ft.Colors.GREEN_900 if marcado else ft.Colors.GREY_900
         linha_container.border = ft.Border.all(1, ft.Colors.GREEN_700 if marcado else ft.Colors.GREY_800)
         linha_container.update()
 
-        # 2. Salva no banco de dados de forma invisível
         def trabalho_banco():
             conexao = conectar_banco()
             cursor = conexao.cursor()
             if marcado:
-                cursor.execute("INSERT INTO historico_checks (usuario, tarefa_id, data, pago) VALUES (%s, %s, %s, 1)", (usuario, id_tarefa, data_hoje))
+                cursor.execute("INSERT INTO historico_checks (usuario, tarefa_id, data, pago) VALUES (%s, %s, %s, 1)", (usuario, id_tarefa, data_alvo_str))
             else:
-                cursor.execute("DELETE FROM historico_checks WHERE usuario = %s AND tarefa_id = %s AND data = %s", (usuario, id_tarefa, data_hoje))
+                cursor.execute("DELETE FROM historico_checks WHERE usuario = %s AND tarefa_id = %s AND data = %s", (usuario, id_tarefa, data_alvo_str))
             conexao.commit()
             conexao.close()
         threading.Thread(target=trabalho_banco, daemon=True).start()
@@ -336,7 +357,6 @@ def main(page: ft.Page):
         carregar_tarefas()
 
     def abrir_dialogo_edicao_tarefa(e, id_tarefa, nome_atual, recorrencia_atual):
-        # Lógica de edição reescrita e 100% funcional sem threads quebradas
         campo_nome_edit = ft.TextField(label="Nome da Tarefa", value=nome_atual, width=300, border_color=ft.Colors.BLUE_400)
         
         if "," in recorrencia_atual or recorrencia_atual.isdigit(): val_rec = "especifico"
@@ -355,8 +375,11 @@ def main(page: ft.Page):
         dialogo = ft.AlertDialog(title=ft.Text("✏️ Editar Tarefa"))
 
         def fechar_dialogo(e):
-            dialogo.open = False
-            page.update()
+            try:
+                page.close(dialogo)
+            except AttributeError:
+                dialogo.open = False
+                page.update()
 
         def salvar_alteracoes(e):
             novo_nome = campo_nome_edit.value.strip()
@@ -369,14 +392,12 @@ def main(page: ft.Page):
                 else: nova_recorrencia = obter_agora_br().strftime("%Y-%m-%d")
 
             if novo_nome != "":
-                # Salva direto e fecha
                 conexao = conectar_banco()
                 cursor = conexao.cursor()
                 cursor.execute("UPDATE tarefas SET nome = %s, recorrencia = %s WHERE id = %s", (novo_nome, nova_recorrencia, id_tarefa))
                 conexao.commit()
                 conexao.close()
-                dialogo.open = False
-                page.update()
+                fechar_dialogo(e)
                 carregar_tarefas()
 
         dialogo.content = ft.Column([campo_nome_edit, seletor_rec_edit], tight=True)
@@ -385,28 +406,30 @@ def main(page: ft.Page):
             ft.TextButton("Salvar", on_click=salvar_alteracoes, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
         ]
         
-        page.dialog = dialogo
-        dialogo.open = True
-        page.update()
+        try:
+            page.open(dialogo)
+        except AttributeError:
+            page.overlay.append(dialogo)
+            dialogo.open = True
+            page.update()
 
     def carregar_tarefas():
         lista_tarefas.controls.clear()
-        agora = obter_agora_br()
-        data_hoje = agora.strftime("%Y-%m-%d")
+        data_alvo_dt = estado_app["data_checklist"]
+        data_alvo_str = data_alvo_dt.strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         
         conexao = conectar_banco()
         cursor = conexao.cursor()
-        cursor.execute("SELECT tarefa_id FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1", (usuario, data_hoje))
+        cursor.execute("SELECT tarefa_id FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1", (usuario, data_alvo_str))
         ids_feitos_hoje = set(r[0] for r in cursor.fetchall())
         cursor.execute("SELECT id, nome, recorrencia FROM tarefas WHERE usuario = %s", (usuario,))
         todas_as_tarefas = cursor.fetchall()
         
         for id_tarefa, nome_tarefa, recorrencia in todas_as_tarefas:
-            if not tarefa_se_aplica(recorrencia, agora): continue
+            if not tarefa_se_aplica(recorrencia, data_alvo_dt): continue
             ja_feito = id_tarefa in ids_feitos_hoje
             
-            # Container pré-criado para evitar erro no lambda
             linha_container = ft.Container(
                 width=460, padding=8, border_radius=10,
                 bgcolor=ft.Colors.GREEN_900 if ja_feito else ft.Colors.GREY_900,
@@ -466,7 +489,7 @@ def main(page: ft.Page):
                 dias_finais = [str(i) for i, chk in enumerate(lista_chks_dias) if chk.value]
                 recorrencia_salvar = ",".join(dias_finais) if dias_finais else "todo_dia"
             elif recorrencia_escolhida == "somente_hoje":
-                recorrencia_salvar = obter_agora_br().strftime("%Y-%m-%d")
+                recorrencia_salvar = obter_agora_br().strftime("%Y-%m-%d") # Salva com a data REAL de hoje
             else:
                 recorrencia_salvar = recorrencia_escolhida
 
@@ -511,16 +534,16 @@ def main(page: ft.Page):
     )
 
     def persistir_gratidoes():
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         itens = [g.strip() for g in gratidoes_hoje if g.strip()]
         conexao = conectar_banco()
         cursor = conexao.cursor()
         if itens:
             texto = "\n".join(itens)
-            cursor.execute("INSERT INTO gratidao (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_hoje, texto))
+            cursor.execute("INSERT INTO gratidao (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_alvo_str, texto))
         else:
-            cursor.execute("DELETE FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+            cursor.execute("DELETE FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         conexao.commit()
         conexao.close()
 
@@ -530,7 +553,7 @@ def main(page: ft.Page):
     def renderizar_gratidoes():
         lista_gratidao_ui.controls.clear()
         if not gratidoes_hoje:
-            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada neste dia.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(gratidoes_hoje):
                 lista_gratidao_ui.controls.append(criar_linha_gratidao(indice, texto_item))
@@ -570,7 +593,7 @@ def main(page: ft.Page):
             renderizar_gratidoes()
 
     def carregar_gratidoes(cursor_existente=None):
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -579,7 +602,7 @@ def main(page: ft.Page):
             fechar = True
         else: cursor = cursor_existente
             
-        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -616,7 +639,7 @@ def main(page: ft.Page):
     )
 
     def persistir_afirmacoes():
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         itens = [a.strip() for a in afirmacoes_hoje if a.strip()]
         conexao = conectar_banco()
@@ -624,9 +647,9 @@ def main(page: ft.Page):
         cursor.execute(SQL_CRIA_AFIRMACOES)
         if itens:
             texto = "\n".join(itens)
-            cursor.execute("INSERT INTO afirmacoes (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_hoje, texto))
+            cursor.execute("INSERT INTO afirmacoes (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_alvo_str, texto))
         else:
-            cursor.execute("DELETE FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+            cursor.execute("DELETE FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         conexao.commit()
         conexao.close()
 
@@ -636,7 +659,7 @@ def main(page: ft.Page):
     def renderizar_afirmacoes():
         lista_afirmacoes_ui.controls.clear()
         if not afirmacoes_hoje:
-            lista_afirmacoes_ui.controls.append(ft.Text("Nenhuma afirmação registrada hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_afirmacoes_ui.controls.append(ft.Text("Nenhuma afirmação registrada neste dia.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(afirmacoes_hoje):
                 lista_afirmacoes_ui.controls.append(criar_linha_afirmacao(indice, texto_item))
@@ -676,7 +699,7 @@ def main(page: ft.Page):
             renderizar_afirmacoes()
 
     def carregar_afirmacoes(cursor_existente=None):
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -686,7 +709,7 @@ def main(page: ft.Page):
         else: cursor = cursor_existente
             
         cursor.execute(SQL_CRIA_AFIRMACOES)
-        cursor.execute("SELECT mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        cursor.execute("SELECT mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -723,7 +746,7 @@ def main(page: ft.Page):
     )
 
     def persistir_pedidos():
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         itens = [p.strip() for p in pedidos_hoje if p.strip()]
         conexao = conectar_banco()
@@ -731,9 +754,9 @@ def main(page: ft.Page):
         cursor.execute("CREATE TABLE IF NOT EXISTS pedidos (usuario TEXT, data TEXT, mensagem TEXT, UNIQUE(usuario, data))")
         if itens:
             texto = "\n".join(itens)
-            cursor.execute("INSERT INTO pedidos (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_hoje, texto))
+            cursor.execute("INSERT INTO pedidos (usuario, data, mensagem) VALUES (%s, %s, %s) ON CONFLICT (usuario, data) DO UPDATE SET mensagem = EXCLUDED.mensagem", (usuario, data_alvo_str, texto))
         else:
-            cursor.execute("DELETE FROM pedidos WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+            cursor.execute("DELETE FROM pedidos WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         conexao.commit()
         conexao.close()
 
@@ -743,7 +766,7 @@ def main(page: ft.Page):
     def renderizar_pedidos():
         lista_pedidos_ui.controls.clear()
         if not pedidos_hoje:
-            lista_pedidos_ui.controls.append(ft.Text("Nenhum pedido registrado hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_pedidos_ui.controls.append(ft.Text("Nenhum pedido registrado neste dia.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(pedidos_hoje):
                 lista_pedidos_ui.controls.append(criar_linha_pedido(indice, texto_item))
@@ -783,7 +806,7 @@ def main(page: ft.Page):
             renderizar_pedidos()
 
     def carregar_pedidos(cursor_existente=None):
-        data_hoje = obter_agora_br().strftime("%Y-%m-%d")
+        data_alvo_str = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -793,7 +816,7 @@ def main(page: ft.Page):
         else: cursor = cursor_existente
             
         cursor.execute("CREATE TABLE IF NOT EXISTS pedidos (usuario TEXT, data TEXT, mensagem TEXT, UNIQUE(usuario, data))")
-        cursor.execute("SELECT mensagem FROM pedidos WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        cursor.execute("SELECT mensagem FROM pedidos WHERE usuario = %s AND data = %s", (usuario, data_alvo_str))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -853,8 +876,9 @@ def main(page: ft.Page):
     conteudo_checklist = ft.Column(
         controls=[
             ft.Divider(), texto_titulo, texto_subtitulo, ft.Container(height=10),
+            linha_navegacao_dias, ft.Container(height=10),
             container_cadastro_rotina, ft.Container(height=16),
-            ft.Text("✅ Tarefas de hoje", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT),
+            titulo_tarefas_dia,
             lista_tarefas, ft.Container(height=20), ft.Divider(thickness=2, color=ft.Colors.GREY_700),
             ft.Container(height=10), container_gratidao, ft.Container(height=20),
             ft.Divider(thickness=2, color=ft.Colors.GREY_700), ft.Container(height=10),
@@ -875,7 +899,7 @@ def main(page: ft.Page):
 
     btn_relogio_voltar = ft.IconButton(icon=ft.Icons.ARROW_BACK_IOS, icon_color=ft.Colors.BLUE_400, on_click=lambda e: mudar_data_dashboard(-1))
     btn_relogio_avancar = ft.IconButton(icon=ft.Icons.ARROW_FORWARD_IOS, icon_color=ft.Colors.BLUE_400, on_click=lambda e: mudar_data_dashboard(1))
-    linha_maquina_tempo = ft.Row(controls=[btn_relogio_voltar, texto_data_dashboard, btn_relogio_avancar], alignment=ft.MainAxisAlignment.CENTER, spacing=20)
+    linha_maquina_tempo_dash = ft.Row(controls=[btn_relogio_voltar, texto_data_dashboard, btn_relogio_avancar], alignment=ft.MainAxisAlignment.CENTER, spacing=20)
 
     def criar_card_pizza(titulo, porcentagem):
         valor_anel = porcentagem / 100.0 
@@ -957,7 +981,7 @@ def main(page: ft.Page):
         )
 
         conteudo_dashboard.controls.extend([
-            ft.Divider(), linha_maquina_tempo, ft.Container(height=10), 
+            ft.Divider(), linha_maquina_tempo_dash, ft.Container(height=10), 
             ft.Text("🏆 Central de Metas", size=24, weight=ft.FontWeight.BOLD), 
             ft.Text("Complete os anéis e vença mais um dia!", size=14, color=ft.Colors.GREY_400), 
             ft.Container(height=15), linha_graficos, ft.Container(height=10)
@@ -1024,6 +1048,8 @@ def main(page: ft.Page):
         botao_menu_diario.bgcolor = ft.Colors.GREY_800
 
     def alternar_para_checklist(e=None):
+        estado_app["data_checklist"] = obter_agora_br() # Volta pra hoje por padrão
+        mudar_dia_checklist("atual")
         conteudo_checklist.visible = True
         conteudo_dashboard.visible = False
         conteudo_diario.visible = False
@@ -1063,5 +1089,3 @@ def main(page: ft.Page):
 
 porta_nuvem = int(os.environ.get("PORT", 8080))
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta_nuvem)
-
-```
