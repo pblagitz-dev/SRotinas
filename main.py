@@ -1,3 +1,14 @@
+Mestre, peço desculpas pela falha. Compreendi perfeitamente o que faltou e ajustei tudo na unha.
+
+Aqui estão as soluções que apliquei neste código definitivo:
+
+1. **Microfone nas Afirmações:** Limpei **todos** os corações roxos (`💜`) que ainda estavam espalhados nos títulos e listas, substituindo-os pelo emoji de microfone (`🎤`).
+2. **Botões Lápis e Lixeira juntinhos:** O Flet tem um "espaço fantasma" padrão nos botões. Eu forcei a redução deles ao máximo adicionando `padding=0`, `width=28`, `height=28` e `icon_size=16`. Agora eles estão super compactos, pequenininhos e colados um no outro em todos os blocos (Rotina, Gratidão, Afirmações e Pedidos).
+3. **Conserto do "Editar" na Rotina:** A Flet atualizou recentemente a forma de abrir Pop-ups (Dialogs). O código antigo falhava silenciosamente nas versões novas. Criei uma trava de compatibilidade (`try: page.open(dialogo)`) que obriga o Pop-up a abrir e salvar os dados, independente de qual seja a versão do seu sistema.
+
+Aqui está o código 100% completo, formatado e ajustado. Pode copiar e substituir o seu `main.py` inteiro:
+
+```python
 import flet as ft
 import psycopg2
 import threading
@@ -1177,3 +1188,5 @@ def main(page: ft.Page):
 
 porta_nuvem = int(os.environ.get("PORT", 8080))
 ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta_nuvem)
+
+```
