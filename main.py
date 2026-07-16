@@ -153,8 +153,10 @@ def main(page: ft.Page):
         carregar_tarefas()
         atualizar_foguinho()
         
-        thread_relogio = threading.Thread(target=atualizar_relogio, daemon=True)
-        thread_relogio.start()
+        if not estado_app.get("relogio_ativo"):
+            estado_app["relogio_ativo"] = True
+            thread_relogio = threading.Thread(target=atualizar_relogio, daemon=True)
+            thread_relogio.start()
         
         msg = f"🔐 PIN criado! Bem-vindo(a), {nome}!" if novo else f"👋 Bem-vindo de volta, {nome}!"
         page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.GREEN_800 if novo else ft.Colors.BLUE_800)
@@ -304,7 +306,8 @@ def main(page: ft.Page):
     )
 
     def atualizar_relogio():
-        # Esta função foi otimizada para NÃO dar page.update(), evitando as piscadas.
+        # Resiliente: nunca morre por um erro de update (evita perder o relógio
+        # quando a sessao oscila com o celular em segundo plano).
         while True:
             try:
                 agora = obter_agora_br()
@@ -312,12 +315,11 @@ def main(page: ft.Page):
                 hora_formatada = agora.strftime("%H:%M:%S")
                 texto_usuario.value = f"👤 {estado_app['usuario']}"
                 relogio_digital.value = f"🗓️ {data_formatada}    ⏰ {hora_formatada}"
-                
                 texto_usuario.update()
                 relogio_digital.update()
-                time.sleep(1)
-            except:
-                break
+            except Exception:
+                pass
+            time.sleep(1)
 
     def atualizar_foguinho():
         usuario = estado_app["usuario"]
@@ -431,8 +433,12 @@ def main(page: ft.Page):
 
         dialogo = ft.AlertDialog(title=ft.Text("✏️ Editar Tarefa"))
 
-        def fechar_dialogo(e):
+        def fechar_dialogo(e=None):
             dialogo.open = False
+            try:
+                page.close(dialogo)
+            except Exception:
+                pass
             if dialogo in page.overlay:
                 page.overlay.remove(dialogo)
             page.update()
@@ -705,7 +711,9 @@ def main(page: ft.Page):
     )
 
     def persistir_afirmacoes():
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
+        # Afirmações são PERENES: usam uma chave fixa, não o dia.
+        # Só mudam quando o usuário edita ou exclui. Nunca somem ao virar o dia.
+        data_hoje = "PERENE"
         usuario = estado_app["usuario"]
         itens = [a.strip() for a in afirmacoes_hoje if a.strip()]
         conexao = conectar_banco()
@@ -725,7 +733,7 @@ def main(page: ft.Page):
     def renderizar_afirmacoes():
         lista_afirmacoes_ui.controls.clear()
         if not afirmacoes_hoje:
-            lista_afirmacoes_ui.controls.append(ft.Text("Nenhuma afirmação registrada hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_afirmacoes_ui.controls.append(ft.Text("Nenhuma afirmação cadastrada ainda.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(afirmacoes_hoje):
                 lista_afirmacoes_ui.controls.append(criar_linha_afirmacao(indice, texto_item))
@@ -771,7 +779,7 @@ def main(page: ft.Page):
             executar_com_aguarde(trabalho, "Salvando...")
 
     def carregar_afirmacoes(cursor_existente=None):
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
+        data_hoje = "PERENE"
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -1085,7 +1093,7 @@ def main(page: ft.Page):
         cursor.execute("SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
         registros_gratidao = cursor.fetchall()
         cursor.execute(SQL_CRIA_AFIRMACOES)
-        cursor.execute("SELECT data, mensagem FROM afirmacoes WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
+        cursor.execute("SELECT data, mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
         registros_afirmacoes = cursor.fetchall()
         cursor.execute("CREATE TABLE IF NOT EXISTS pedidos (usuario TEXT, data TEXT, mensagem TEXT, UNIQUE(usuario, data))")
         cursor.execute("SELECT data, mensagem FROM pedidos WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
@@ -1101,10 +1109,10 @@ def main(page: ft.Page):
             data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
             lista_registros_gratidao.controls.append(ft.Container(content=ft.Column([ft.Text(data_br, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.GREY_800)))
 
-        if not registros_afirmacoes: lista_registros_afirmacoes.controls.append(ft.Text("Nenhuma afirmação registrada neste mês.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
+        if not registros_afirmacoes: lista_registros_afirmacoes.controls.append(ft.Text("Nenhuma afirmação cadastrada ainda.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_afirmacoes:
-            data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-            lista_registros_afirmacoes.controls.append(ft.Container(content=ft.Column([ft.Text(data_br, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_300), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.PURPLE_900)))
+            titulo_af = "Minhas Afirmações" if data_str == "PERENE" else datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+            lista_registros_afirmacoes.controls.append(ft.Container(content=ft.Column([ft.Text(titulo_af, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_300), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.PURPLE_900)))
 
         if not registros_pedidos: lista_registros_pedidos.controls.append(ft.Text("Nenhum pedido manifestado neste mês.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_pedidos:
