@@ -58,6 +58,9 @@ def main(page: ft.Page):
 
     # ==========================================
     # TIMER / "AGUARDE" (overlay central)
+    # Usa APENAS mecanismos já comprovados neste app:
+    #   - .visible + .update() de controle (igual ao relógio, que funciona)
+    #   - thread para o trabalho do banco (igual ao alternar_check, que funciona)
     # ==========================================
     txt_aguarde = ft.Text("Salvando...", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
     overlay_aguarde = ft.Container(
@@ -139,7 +142,7 @@ def main(page: ft.Page):
     def entrar_no_app(nome, novo):
         estado_app["usuario"] = nome
         estado_app["data_checklist"] = obter_agora_br()
-        registrar_acesso_hoje(nome)
+        registrar_acesso_hoje(nome) # Registra o login para o foguinho!
         
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
@@ -227,6 +230,7 @@ def main(page: ft.Page):
         salvar_pin(nome, pin1)
         entrar_no_app(nome, novo=True)
 
+    # --- Elementos da Tela de Login ---
     campo_login = ft.TextField(
         label="Digite seu nome (sempre o mesmo)", width=300, border_color=ft.Colors.GREEN_700,
         text_align=ft.TextAlign.CENTER, autofocus=True, capitalization=ft.TextCapitalization.CHARACTERS,
@@ -302,6 +306,8 @@ def main(page: ft.Page):
     )
 
     def atualizar_relogio():
+        # Resiliente: nunca morre por um erro de update (evita perder o relógio
+        # quando a sessao oscila com o celular em segundo plano).
         while True:
             try:
                 agora = obter_agora_br()
@@ -349,6 +355,7 @@ def main(page: ft.Page):
 
     # ==========================================
     # NAVEGAÇÃO DE DIAS (HOJE / ONTEM)
+    # Botões no padrão do "← Trocar nome" (só texto + on_click), que já funciona.
     # ==========================================
     btn_dia_anterior = ft.TextButton("⬅️ Dia Anterior", on_click=lambda e: mudar_dia_checklist("anterior"))
     btn_dia_atual = ft.TextButton("Dia Atual ➡️", visible=False, on_click=lambda e: mudar_dia_checklist("atual"))
@@ -374,14 +381,17 @@ def main(page: ft.Page):
     lista_tarefas = ft.Column()
 
     def alternar_check(e, id_tarefa, linha_container):
+        # Esta função foi otimizada para NÃO recarregar a lista e evitar piscadas.
         usuario = estado_app["usuario"]
         data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
         marcado = e.control.value
         
+        # 1. Muda a cor visualmente na mesma hora sem piscar
         linha_container.bgcolor = ft.Colors.GREEN_900 if marcado else ft.Colors.GREY_900
         linha_container.border = ft.Border.all(1, ft.Colors.GREEN_700 if marcado else ft.Colors.GREY_800)
         linha_container.update()
 
+        # 2. Salva no banco de dados de forma invisível
         def trabalho_banco():
             conexao = conectar_banco()
             cursor = conexao.cursor()
@@ -425,6 +435,9 @@ def main(page: ft.Page):
         def fechar_dialogo(e=None):
             dialogo.open = False
             page.update()
+            if dialogo in page.overlay:
+                page.overlay.remove(dialogo)
+                page.update()
 
         def salvar_alteracoes(e):
             novo_nome = campo_nome_edit.value.strip()
@@ -453,7 +466,8 @@ def main(page: ft.Page):
             ft.TextButton("Salvar", on_click=salvar_alteracoes, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
         ]
         
-        page.dialog = dialogo
+        # Abordagem blindada para forçar o pop-up a abrir em qualquer versão do Flet
+        page.overlay.append(dialogo)
         dialogo.open = True
         page.update()
 
@@ -474,6 +488,7 @@ def main(page: ft.Page):
             if not tarefa_se_aplica(recorrencia, agora): continue
             ja_feito = id_tarefa in ids_feitos_hoje
             
+            # Container pré-criado para evitar erro no lambda
             linha_container = ft.Container(
                 width=460, padding=8, border_radius=10,
                 bgcolor=ft.Colors.GREEN_900 if ja_feito else ft.Colors.GREY_900,
@@ -552,6 +567,7 @@ def main(page: ft.Page):
 
     # ------------------------------------------------------------------
     # FUNÇÃO GENÉRICA PARA BLOCOS DE DIÁRIO
+    # Mantida perfeitamente como no arquivo base do Claude para preservar seu layout
     # ------------------------------------------------------------------
     def criar_linha_item(emoji, texto_item, cor_borda, cor_editar, on_editar, on_excluir):
         rotulo = ft.Text(f"{emoji} {texto_item}", expand=True, color=ft.Colors.WHITE) 
@@ -569,7 +585,7 @@ def main(page: ft.Page):
         )
 
     # ------------------------------------------------------------------
-    # GRATIDÃO
+    # GRATIDÃO (Agora Perene!)
     # ------------------------------------------------------------------
     gratidoes_hoje = []                       
     lista_gratidao_ui = ft.Column(spacing=8, width=440)
@@ -579,7 +595,7 @@ def main(page: ft.Page):
     )
 
     def persistir_gratidoes():
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
+        data_hoje = "PERENE"
         usuario = estado_app["usuario"]
         itens = [g.strip() for g in gratidoes_hoje if g.strip()]
         conexao = conectar_banco()
@@ -598,7 +614,7 @@ def main(page: ft.Page):
     def renderizar_gratidoes():
         lista_gratidao_ui.controls.clear()
         if not gratidoes_hoje:
-            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada ainda.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(gratidoes_hoje):
                 lista_gratidao_ui.controls.append(criar_linha_gratidao(indice, texto_item))
@@ -644,7 +660,6 @@ def main(page: ft.Page):
             executar_com_aguarde(trabalho, "Salvando...")
 
     def carregar_gratidoes(cursor_existente=None):
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -653,7 +668,8 @@ def main(page: ft.Page):
             fechar = True
         else: cursor = cursor_existente
             
-        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        # Puxa sempre a perene, independente do dia que você entrar
+        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s ORDER BY data DESC LIMIT 1", (usuario,))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -672,7 +688,7 @@ def main(page: ft.Page):
         content=ft.Column(
             [
                 ft.Text("🙏 Diário de Gratidão", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
-                ft.Text("Registre pelo que você foi grato no dia anterior.", size=13, color=ft.Colors.GREY_400),
+                ft.Text("Registre pelo que você foi grato.", size=13, color=ft.Colors.GREY_400),
                 ft.Container(height=4), lista_gratidao_ui, ft.Container(height=4),
                 campo_nova_gratidao, botao_adicionar_gratidao
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10
@@ -680,7 +696,7 @@ def main(page: ft.Page):
     )
 
     # ------------------------------------------------------------------
-    # AFIRMAÇÕES - AGORA SÃO PERENES!
+    # AFIRMAÇÕES (Perene)
     # ------------------------------------------------------------------
     afirmacoes_hoje = []                       
     lista_afirmacoes_ui = ft.Column(spacing=8, width=440)
@@ -710,7 +726,7 @@ def main(page: ft.Page):
     def renderizar_afirmacoes():
         lista_afirmacoes_ui.controls.clear()
         if not afirmacoes_hoje:
-            lista_afirmacoes_ui.controls.append(ft.Text("Sua lista de afirmações está vazia.", italic=True, color=ft.Colors.GREY_500))
+            lista_afirmacoes_ui.controls.append(ft.Text("Nenhuma afirmação cadastrada ainda.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(afirmacoes_hoje):
                 lista_afirmacoes_ui.controls.append(criar_linha_afirmacao(indice, texto_item))
@@ -756,7 +772,6 @@ def main(page: ft.Page):
             executar_com_aguarde(trabalho, "Salvando...")
 
     def carregar_afirmacoes(cursor_existente=None):
-        data_hoje = "PERENE"
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -766,7 +781,7 @@ def main(page: ft.Page):
         else: cursor = cursor_existente
             
         cursor.execute(SQL_CRIA_AFIRMACOES)
-        cursor.execute("SELECT mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        cursor.execute("SELECT mensagem FROM afirmacoes WHERE usuario = %s ORDER BY data DESC LIMIT 1", (usuario,))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -793,7 +808,7 @@ def main(page: ft.Page):
     )
 
     # ------------------------------------------------------------------
-    # PEDIDOS (MANIFESTAÇÃO NEON)
+    # PEDIDOS (Manifestação Neon - Agora Perene também!)
     # ------------------------------------------------------------------
     pedidos_hoje = []                       
     lista_pedidos_ui = ft.Column(spacing=8, width=440)
@@ -803,7 +818,7 @@ def main(page: ft.Page):
     )
 
     def persistir_pedidos():
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
+        data_hoje = "PERENE"
         usuario = estado_app["usuario"]
         itens = [p.strip() for p in pedidos_hoje if p.strip()]
         conexao = conectar_banco()
@@ -823,7 +838,7 @@ def main(page: ft.Page):
     def renderizar_pedidos():
         lista_pedidos_ui.controls.clear()
         if not pedidos_hoje:
-            lista_pedidos_ui.controls.append(ft.Text("Nenhum pedido registrado hoje ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_pedidos_ui.controls.append(ft.Text("Nenhum pedido registrado ainda.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(pedidos_hoje):
                 lista_pedidos_ui.controls.append(criar_linha_pedido(indice, texto_item))
@@ -869,7 +884,6 @@ def main(page: ft.Page):
             executar_com_aguarde(trabalho, "Manifestando...")
 
     def carregar_pedidos(cursor_existente=None):
-        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         fechar = False
         if cursor_existente is None:
@@ -879,7 +893,7 @@ def main(page: ft.Page):
         else: cursor = cursor_existente
             
         cursor.execute("CREATE TABLE IF NOT EXISTS pedidos (usuario TEXT, data TEXT, mensagem TEXT, UNIQUE(usuario, data))")
-        cursor.execute("SELECT mensagem FROM pedidos WHERE usuario = %s AND data = %s", (usuario, data_hoje))
+        cursor.execute("SELECT mensagem FROM pedidos WHERE usuario = %s ORDER BY data DESC LIMIT 1", (usuario,))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -1064,13 +1078,13 @@ def main(page: ft.Page):
         cursor = conexao.cursor()
         mes_atual = obter_agora_br().strftime("%Y-%m")
         
-        cursor.execute("SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
+        cursor.execute("SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
         registros_gratidao = cursor.fetchall()
         cursor.execute(SQL_CRIA_AFIRMACOES)
         cursor.execute("SELECT data, mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
         registros_afirmacoes = cursor.fetchall()
         cursor.execute("CREATE TABLE IF NOT EXISTS pedidos (usuario TEXT, data TEXT, mensagem TEXT, UNIQUE(usuario, data))")
-        cursor.execute("SELECT data, mensagem FROM pedidos WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
+        cursor.execute("SELECT data, mensagem FROM pedidos WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
         registros_pedidos = cursor.fetchall()
         conexao.close()
         
@@ -1080,8 +1094,8 @@ def main(page: ft.Page):
         
         if not registros_gratidao: lista_registros_gratidao.controls.append(ft.Text("Nenhuma gratidão registrada neste mês.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_gratidao:
-            data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-            lista_registros_gratidao.controls.append(ft.Container(content=ft.Column([ft.Text(data_br, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.GREY_800)))
+            titulo_gr = "Minha Gratidão Diária" if data_str == "PERENE" else datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+            lista_registros_gratidao.controls.append(ft.Container(content=ft.Column([ft.Text(titulo_gr, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.GREY_800)))
 
         if not registros_afirmacoes: lista_registros_afirmacoes.controls.append(ft.Text("Nenhuma afirmação cadastrada ainda.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_afirmacoes:
@@ -1090,8 +1104,8 @@ def main(page: ft.Page):
 
         if not registros_pedidos: lista_registros_pedidos.controls.append(ft.Text("Nenhum pedido manifestado neste mês.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_pedidos:
-            data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-            lista_registros_pedidos.controls.append(ft.Container(content=ft.Column([ft.Text(data_br, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.YELLOW_900)))
+            titulo_pd = "Meus Pedidos" if data_str == "PERENE" else datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+            lista_registros_pedidos.controls.append(ft.Container(content=ft.Column([ft.Text(titulo_pd, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.YELLOW_900)))
             
         btn_exportar = ft.FilledButton("Baixar Diário Completo", icon=ft.Icons.DOWNLOAD, bgcolor=ft.Colors.BLUE_600, on_click=exportar_diario)
         
@@ -1099,9 +1113,9 @@ def main(page: ft.Page):
             ft.Divider(), ft.Text("📖 Diário Pessoal", size=24, weight=ft.FontWeight.BOLD), 
             ft.Text("O que você agradeceu, afirmou e pediu", size=14, color=ft.Colors.GREY_400), 
             ft.Container(height=10), btn_exportar, ft.Container(height=15), 
-            ft.Text("🙏 Gratidão do Mês", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200), lista_registros_gratidao, ft.Container(height=15), 
-            ft.Text("🎤 Afirmações do Mês", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_300), lista_registros_afirmacoes, ft.Container(height=15), 
-            ft.Text("✨ Pedidos do Mês", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_ACCENT), lista_registros_pedidos, ft.Container(height=40),
+            ft.Text("🙏 Gratidão", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200), lista_registros_gratidao, ft.Container(height=15), 
+            ft.Text("🎤 Afirmações", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_300), lista_registros_afirmacoes, ft.Container(height=15), 
+            ft.Text("✨ Pedidos", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_ACCENT), lista_registros_pedidos, ft.Container(height=40),
         ])
 
     conteudo_dashboard.visible = False
@@ -1146,7 +1160,8 @@ def main(page: ft.Page):
     
     linha_abas_custom = ft.Row(
         controls=[botao_menu_checklist, botao_menu_dashboard, botao_menu_diario], 
-        alignment=ft.MainAxisAlignment.START, spacing=10, scroll=ft.ScrollMode.AUTO 
+        alignment=ft.MainAxisAlignment.CENTER, # AQUI O AJUSTE PARA O PC!
+        spacing=10, scroll=ft.ScrollMode.AUTO 
     )
 
     page.add(tela_login)
