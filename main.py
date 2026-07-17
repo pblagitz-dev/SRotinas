@@ -414,15 +414,18 @@ def main(page: ft.Page):
             carregar_tarefas()
         executar_com_aguarde(trabalho, "Apagando...")
 
-    def abrir_dialogo_edicao_tarefa(e, id_tarefa, nome_atual, recorrencia_atual):
-        campo_nome_edit = ft.TextField(label="Nome da Tarefa", value=nome_atual, width=300, border_color=ft.Colors.BLUE_400)
-        
+    def abrir_dialogo_edicao_tarefa(e, id_tarefa, nome_atual, recorrencia_atual, linha_container):
+        # EDIÇÃO INLINE (sem AlertDialog): o pop-up do Flet tem histórico de bugs
+        # de abrir/fechar. Aqui usamos o mesmo padrão da edição de gratidão,
+        # que funciona comprovadamente neste app: trocamos o conteúdo do card.
+        campo_nome_edit = ft.TextField(label="Nome da Tarefa", value=nome_atual, width=420, border_color=ft.Colors.BLUE_400)
+
         if "," in recorrencia_atual or recorrencia_atual.isdigit(): val_rec = "especifico"
         elif "-" in recorrencia_atual and len(recorrencia_atual) == 10: val_rec = "somente_hoje"
         else: val_rec = recorrencia_atual
-        
+
         seletor_rec_edit = ft.Dropdown(
-            label="Recorrência", width=300, value=val_rec, border_color=ft.Colors.BLUE_400,
+            label="Recorrência", width=420, value=val_rec, border_color=ft.Colors.BLUE_400,
             options=[
                 ft.dropdown.Option("somente_hoje", "Somente hoje"), ft.dropdown.Option("todo_dia", "Todo dia"),
                 ft.dropdown.Option("exceto_fds", "Dias de Semana"), ft.dropdown.Option("apenas_fds", "Finais de Semana"),
@@ -430,27 +433,20 @@ def main(page: ft.Page):
             ]
         )
 
-        dialogo = ft.AlertDialog(title=ft.Text("✏️ Editar Tarefa"))
-
-        def fechar_dialogo(e=None):
-            dialogo.open = False
-            page.update()
-            if dialogo in page.overlay:
-                page.overlay.remove(dialogo)
-                page.update()
+        def cancelar_edicao(e=None):
+            carregar_tarefas()
 
         def salvar_alteracoes(e):
             novo_nome = campo_nome_edit.value.strip()
             nova_recorrencia = seletor_rec_edit.value
-            
-            if nova_recorrencia == "especifico" and val_rec != "especifico": nova_recorrencia = "todo_dia" 
+
+            if nova_recorrencia == "especifico" and val_rec != "especifico": nova_recorrencia = "todo_dia"
             elif val_rec == "especifico" and nova_recorrencia == "especifico": nova_recorrencia = recorrencia_atual
             elif nova_recorrencia == "somente_hoje":
                 if val_rec == "somente_hoje": nova_recorrencia = recorrencia_atual
                 else: nova_recorrencia = obter_agora_br().strftime("%Y-%m-%d")
 
             if novo_nome != "":
-                fechar_dialogo()
                 def trabalho():
                     conexao = conectar_banco()
                     cursor = conexao.cursor()
@@ -460,15 +456,21 @@ def main(page: ft.Page):
                     carregar_tarefas()
                 executar_com_aguarde(trabalho, "Salvando...")
 
-        dialogo.content = ft.Column([campo_nome_edit, seletor_rec_edit], tight=True)
-        dialogo.actions = [
-            ft.TextButton("Cancelar", on_click=fechar_dialogo, style=ft.ButtonStyle(color=ft.Colors.RED_400)),
-            ft.TextButton("Salvar", on_click=salvar_alteracoes, style=ft.ButtonStyle(color=ft.Colors.BLUE_400)),
-        ]
-        
-        # Abordagem blindada para forçar o pop-up a abrir em qualquer versão do Flet
-        page.overlay.append(dialogo)
-        dialogo.open = True
+        linha_container.content = ft.Column(
+            [
+                ft.Text("✏️ Editar Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200),
+                campo_nome_edit,
+                seletor_rec_edit,
+                ft.Row(
+                    [
+                        ft.TextButton("Cancelar", on_click=cancelar_edicao, style=ft.ButtonStyle(color=ft.Colors.RED_400)),
+                        ft.FilledButton("Salvar", on_click=salvar_alteracoes, bgcolor=ft.Colors.BLUE_600),
+                    ],
+                    alignment=ft.MainAxisAlignment.END, spacing=6,
+                ),
+            ],
+            spacing=8, tight=True,
+        )
         page.update()
 
     def carregar_tarefas():
@@ -504,7 +506,7 @@ def main(page: ft.Page):
             botao_editar = ft.IconButton(
                 icon=ft.Icons.EDIT_OUTLINED, icon_color=ft.Colors.BLUE_400, icon_size=16,
                 padding=0, width=28, height=28,
-                on_click=lambda e, id_t=id_tarefa, n=nome_tarefa, r=recorrencia: abrir_dialogo_edicao_tarefa(e, id_t, n, r)
+                on_click=lambda e, id_t=id_tarefa, n=nome_tarefa, r=recorrencia, lc=linha_container: abrir_dialogo_edicao_tarefa(e, id_t, n, r, lc)
             )
             
             botao_lixo = ft.IconButton(
@@ -595,7 +597,7 @@ def main(page: ft.Page):
     )
 
     def persistir_gratidoes():
-        data_hoje = "PERENE"
+        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
         usuario = estado_app["usuario"]
         itens = [g.strip() for g in gratidoes_hoje if g.strip()]
         conexao = conectar_banco()
@@ -614,7 +616,7 @@ def main(page: ft.Page):
     def renderizar_gratidoes():
         lista_gratidao_ui.controls.clear()
         if not gratidoes_hoje:
-            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada ainda.", italic=True, color=ft.Colors.GREY_500))
+            lista_gratidao_ui.controls.append(ft.Text("Nenhuma gratidão registrada neste dia ainda.", italic=True, color=ft.Colors.GREY_500))
         else:
             for indice, texto_item in enumerate(gratidoes_hoje):
                 lista_gratidao_ui.controls.append(criar_linha_gratidao(indice, texto_item))
@@ -668,8 +670,8 @@ def main(page: ft.Page):
             fechar = True
         else: cursor = cursor_existente
             
-        # Puxa sempre a perene, independente do dia que você entrar
-        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s ORDER BY data DESC LIMIT 1", (usuario,))
+        data_hoje = estado_app["data_checklist"].strftime("%Y-%m-%d")
+        cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, data_hoje))
         row = cursor.fetchone()
         if fechar: conexao.close()
             
@@ -813,7 +815,7 @@ def main(page: ft.Page):
     pedidos_hoje = []                       
     lista_pedidos_ui = ft.Column(spacing=8, width=440)
     campo_novo_pedido = ft.TextField(
-        hint_text="Ex: O meu novo cliente ideal me encontrou hoje.", label="Adicionar um pedido", width=440,
+        hint_text="Ex: Meu cliente ideal me encontrou.", label="Adicionar um pedido", width=440,
         multiline=True, min_lines=1, max_lines=3, border_color=ft.Colors.YELLOW_600, cursor_color=ft.Colors.YELLOW_ACCENT,
     )
 
@@ -1014,26 +1016,36 @@ def main(page: ft.Page):
         data_str = data_alvo.strftime("%Y-%m-%d")
         cursor.execute("SELECT id, recorrencia FROM tarefas WHERE usuario = %s", (usuario,))
         todas_as_tarefas = cursor.fetchall()
-        cursor.execute("SELECT MIN(data) FROM historico_checks WHERE usuario = %s AND pago = 1", (usuario,))
+
+        # Início da contagem: dia do PRIMEIRO login do usuário (tabela acessos)
+        cursor.execute(SQL_CRIA_ACESSOS)
+        cursor.execute("SELECT MIN(data) FROM acessos WHERE usuario = %s", (usuario,))
         resultado_min = cursor.fetchone()
-        
         primeira_data_str = resultado_min[0] if (resultado_min and resultado_min[0]) else data_str
         data_inicio = datetime.strptime(primeira_data_str, "%Y-%m-%d")
-            
+
+        # ==========================================
+        # REGRA SIMPLES DO RELÓGIO DE METAS
+        # Tarefas do dia  = vale 50% (proporcional: fez 4 de 5 => 80% de 50 = 40 pontos)
+        # Gratidão do dia = vale 50% (salvou pelo menos uma => 50 pontos)
+        # ==========================================
         def pct_do_dia(dia):
             dia_str_local = dia.strftime("%Y-%m-%d")
-            tarefas_no_dia = sum(1 for _, rec in todas_as_tarefas if tarefa_se_aplica(rec, dia))
-            esperado = tarefas_no_dia + 1  
+            total_tarefas = sum(1 for _, rec in todas_as_tarefas if tarefa_se_aplica(rec, dia))
             cursor.execute("SELECT COUNT(*) FROM historico_checks WHERE usuario = %s AND data = %s AND pago = 1", (usuario, dia_str_local))
-            feitos_tarefas = cursor.fetchone()[0]
+            feitos = cursor.fetchone()[0]
+            if total_tarefas > 0:
+                pontos_tarefas = (min(feitos, total_tarefas) / total_tarefas) * 50.0
+            else:
+                pontos_tarefas = 0.0
             cursor.execute("SELECT mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, dia_str_local))
             linha_grat = cursor.fetchone()
-            grat = 1 if (linha_grat and linha_grat[0] and linha_grat[0].strip()) else 0
-            feitos = feitos_tarefas + grat
-            return min(100.0, (feitos / esperado) * 100.0) if esperado > 0 else 0.0
+            pontos_gratidao = 50.0 if (linha_grat and linha_grat[0] and linha_grat[0].strip()) else 0.0
+            return pontos_tarefas + pontos_gratidao
 
         pct_diario = pct_do_dia(data_alvo)
-        
+
+        # Semanal e Mensal: média simples dos dias, contando só a partir do primeiro login
         soma_semana, contados_semana = 0.0, 0
         for d in range(7):
             dia = data_alvo - timedelta(days=d)
@@ -1078,7 +1090,7 @@ def main(page: ft.Page):
         cursor = conexao.cursor()
         mes_atual = obter_agora_br().strftime("%Y-%m")
         
-        cursor.execute("SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
+        cursor.execute("SELECT data, mensagem FROM gratidao WHERE usuario = %s AND data LIKE %s ORDER BY data DESC", (usuario, f"{mes_atual}-%"))
         registros_gratidao = cursor.fetchall()
         cursor.execute(SQL_CRIA_AFIRMACOES)
         cursor.execute("SELECT data, mensagem FROM afirmacoes WHERE usuario = %s AND data = %s", (usuario, "PERENE"))
@@ -1094,8 +1106,8 @@ def main(page: ft.Page):
         
         if not registros_gratidao: lista_registros_gratidao.controls.append(ft.Text("Nenhuma gratidão registrada neste mês.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_gratidao:
-            titulo_gr = "Minha Gratidão Diária" if data_str == "PERENE" else datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
-            lista_registros_gratidao.controls.append(ft.Container(content=ft.Column([ft.Text(titulo_gr, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.GREY_800)))
+            data_br = datetime.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+            lista_registros_gratidao.controls.append(ft.Container(content=ft.Column([ft.Text(data_br, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_ACCENT), ft.Text(msg)], horizontal_alignment=ft.CrossAxisAlignment.START), width=450, bgcolor=ft.Colors.GREY_900, padding=15, border_radius=10, border=ft.Border.all(1, ft.Colors.GREY_800)))
 
         if not registros_afirmacoes: lista_registros_afirmacoes.controls.append(ft.Text("Nenhuma afirmação cadastrada ainda.", color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER))
         for data_str, msg in registros_afirmacoes:
@@ -1113,7 +1125,7 @@ def main(page: ft.Page):
             ft.Divider(), ft.Text("📖 Diário Pessoal", size=24, weight=ft.FontWeight.BOLD), 
             ft.Text("O que você agradeceu, afirmou e pediu", size=14, color=ft.Colors.GREY_400), 
             ft.Container(height=10), btn_exportar, ft.Container(height=15), 
-            ft.Text("🙏 Gratidão", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200), lista_registros_gratidao, ft.Container(height=15), 
+            ft.Text("🙏 Gratidão do Mês", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_200), lista_registros_gratidao, ft.Container(height=15), 
             ft.Text("🎤 Afirmações", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_300), lista_registros_afirmacoes, ft.Container(height=15), 
             ft.Text("✨ Pedidos", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.YELLOW_ACCENT), lista_registros_pedidos, ft.Container(height=40),
         ])
